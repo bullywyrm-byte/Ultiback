@@ -34,15 +34,23 @@ import {
 // ==========================================
 // 1. KONFIGURATION & INITIALISIERUNG
 // ==========================================
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const SECRET_INVITE_CODE = "DANIELS-BACKSTUBE-2026";
+const firebaseConfig = {
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
+  apiKey: "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME",
+
+  authDomain: "com-example-danielsbackz-ab8de.firebaseapp.com",
+
+  projectId: "com-example-danielsbackz-ab8de",
+
+  storageBucket: "com-example-danielsbackz-ab8de.firebasestorage.app",
+
+  messagingSenderId: "621450545649",
+
+  appId: "1:621450545649:web:a1a3e227a2b8050e22dc50"
+
+};
+
+
 
 // ==========================================
 // 2. HAUPT-APP KOMPONENTE
