@@ -45,7 +45,7 @@ const firebaseConfig = {
 
 const SECRET_INVITE_CODE = "31123112";
 const appId = firebaseConfig.projectId;
-
+console.log("ACHTUNG! Der aktuell geladene Key ist:", firebaseConfig.apiKey);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = initializeFirestore(app, {
