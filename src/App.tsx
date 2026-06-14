@@ -35,7 +35,7 @@ import {
 // 1. KONFIGURATION & INITIALISIERUNG
 // ==========================================
 const firebaseConfig = {
-  apiKey: "AQ.Ab8RN6K69gxhgsekpn1TFIZXXGhGuXx4B_1gSn7KfIvDKejwgg",
+  apiKey: "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME",
   authDomain: "com-example-danielsbackz-ab8de.firebaseapp.com",
   projectId: "com-example-danielsbackz-ab8de",
   storageBucket: "com-example-danielsbackz-ab8de.firebasestorage.app",
