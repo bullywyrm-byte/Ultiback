@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, Box, ListPlus, Settings, Plus, Minus, Search, Trash2, Edit2, X, AlertCircle, RefreshCw, Layers, Check, Thermometer, Clock, FileText } from 'lucide-react';
+import { Activity, Box, ListPlus, Settings, Plus, Trash2, Edit2, X, AlertCircle, RefreshCw, Layers, Check, Thermometer, Clock, FileText } from 'lucide-react';
 
 const useLocalDB = (key, initialValue) => {
   const [value, setValue] = useState(() => {
@@ -304,7 +304,7 @@ function InventoryView({ inventory, setInventory }) {
 
 function RecipeView({ recipes, setRecipes }) {
   const [editingRecipe, setEditingRecipe] = useState(null);
-  const [scalingMuliplier, setScalingMultiplier] = useState({});
+  const [scalingMultiplier, setScalingMultiplier] = useState({});
 
   const handleCreate = () => {
     const newRecipe = {
@@ -365,7 +365,7 @@ function RecipeView({ recipes, setRecipes }) {
 
       <div className="grid grid-cols-1 gap-6">
         {recipes.map(recipe => {
-          const currentScale = scalingMuliplier[recipe.id] || recipe.baseYield;
+          const currentScale = scalingMultiplier[recipe.id] || recipe.baseYield;
           const factor = currentScale / recipe.baseYield;
 
           return (
@@ -380,7 +380,7 @@ function RecipeView({ recipes, setRecipes }) {
                   <input 
                     type="number" 
                     value={currentScale}
-                    onChange={(e) => setScalingMultiplier({...scalingMuliplier, [recipe.id]: parseFloat(e.target.value) || 1})}
+                    onChange={(e) => setScalingMultiplier({...scalingMultiplier, [recipe.id]: parseFloat(e.target.value) || 1})}
                     className="w-24 bg-white border border-stone-200 rounded-xl px-3 py-2 text-center font-black text-lg focus:ring-2 focus:ring-orange-500 outline-none"
                   />
                   <span className="text-sm font-bold text-stone-500 mr-2">{recipe.yieldUnit}</span>
@@ -482,9 +482,9 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     if (!file) return;
 
     
-    const apiKey = "AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ";
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-    if (!apiKey || !apiKey.startsWith("AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ")) {
+    if (!apiKey || !apiKey.startsWith("AQ.")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
       e.target.value = '';
       return;
@@ -804,7 +804,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
   }, [selectedRecipe, customPrices, recipes]);
 
   const pieceCost = selectedRecipe && calculationData ? (calculationData.totalMaterialCost / selectedRecipe.baseYield) : 0;
-  const suggestedPrice = (pieceCost * (markup / 100)) + parseFloat(fixedAddition || 0);
+  const suggestedPrice = (pieceCost * (markup / 100)) + parseFloat(fixedAddition || '0');
   const breakEven = suggestedPrice > 0 ? Math.ceil(calculationData?.totalMaterialCost / suggestedPrice) : 0;
 
   return (
