@@ -410,7 +410,6 @@ function RecipeView({ recipes, setRecipes }) {
                 </ul>
               </div>
 
-              {/* NEU: Zubereitung & Backvorgang Anzeige */}
               {(recipe.bakeTemp || recipe.bakeTime || recipe.instructions) && (
                 <div className="mb-6 bg-stone-50 rounded-2xl p-4 border border-stone-100">
                   <div className="flex flex-wrap gap-4 mb-4">
@@ -492,6 +491,17 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     setIsAnalyzing(true);
     setAnalyzeError('');
 
+    // 🔴 WICHTIG: Wenn du die App exportierst, trage hier deinen echten Google Gemini API-Key ein.
+    // Ohne diesen Key kann die KI-Funktion nicht mit den Google-Servern kommunizieren.
+    const apiKey = "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME"; 
+
+    if (!apiKey || apiKey.trim() === "") {
+      setAnalyzeError("⚠️ API-Key fehlt! Bitte trage deinen kostenlosen Gemini API-Key im Quellcode der App ein.");
+      setIsAnalyzing(false);
+      e.target.value = '';
+      return;
+    }
+
     try {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -500,7 +510,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           const base64Data = reader.result.split(',')[1];
           let mimeType = file.type; 
           
-          // Fallback, falls das Betriebssystem bei PDFs keinen Mime-Type mitschickt
           if (!mimeType && file.name.toLowerCase().endsWith('.pdf')) {
             mimeType = 'application/pdf';
           }
@@ -547,8 +556,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             }
           };
 
-          const apiKey = ""; // API Key is dynamically injected in this environment
-          // Update auf das offizielle, stabile Modell für Multimodale Eingaben (PDF/Bilder)
           const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
           const response = await fetch(apiUrl, {
@@ -558,20 +565,26 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           });
 
           if (!response.ok) {
-            console.error("API Fehler-Details:", await response.text());
-            throw new Error("Fehlerhafte Antwort der KI-Schnittstelle.");
+            const errText = await response.text();
+            console.error("API Fehler-Details:", errText);
+            throw new Error(`Google Server hat die Anfrage abgelehnt (Status: ${response.status}). Überprüfe den API-Key.`);
           }
 
           const result = await response.json();
           if (result.candidates && result.candidates.length > 0) {
             let jsonText = result.candidates[0].content.parts[0].text;
             
-            // Sicherheits-Reinigung: Entfernt mögliche Markdown-Blöcke (```json) der KI
+            // Erweiterte Sicherheits-Reinigung für fehlerhafte KI Antworten
             jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
             
-            const data = JSON.parse(jsonText);
+            let data;
+            try {
+              data = JSON.parse(jsonText);
+            } catch (parseErr) {
+              console.error("Ungültiges JSON von der KI erhalten:", jsonText);
+              throw new Error("Die KI hat die Daten in einem unlesbaren Format zurückgegeben.");
+            }
 
-            // Mappe die KI-Antwort in unser App-Format
             const newIngredients = (data.ingredients || []).map(ing => ({
               type: 'ingredient',
               name: ing.name || 'Unbekannte Zutat',
@@ -579,7 +592,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
               unit: ing.unit || 'g'
             }));
 
-            // Aktualisiere den Editor-State
             setEdited(prev => ({
               ...prev,
               title: data.title && prev.title === 'Neues Rezept' ? data.title : prev.title,
@@ -595,15 +607,15 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           }
         } catch (error) {
           console.error("Verarbeitungsfehler:", error);
-          setAnalyzeError("Verarbeitungsfehler der KI.");
+          setAnalyzeError(error.message || "Verarbeitungsfehler beim Auslesen der Datei.");
         } finally {
           setIsAnalyzing(false);
-          e.target.value = ''; // Reset Input
+          e.target.value = '';
         }
       };
     } catch (err) {
       console.error("Dateifehler:", err);
-      setAnalyzeError("Dateifehler beim Einlesen.");
+      setAnalyzeError("Lokaler Dateifehler beim Einlesen.");
       setIsAnalyzing(false);
     }
   };
@@ -648,8 +660,9 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
         </div>
         
         {analyzeError && (
-          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-bold border border-red-200 flex items-center">
-            <AlertCircle className="w-5 h-5 mr-2" /> {analyzeError}
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-bold border border-red-200 flex items-start">
+            <AlertCircle className="w-5 h-5 mr-2 shrink-0 mt-0.5" /> 
+            <div>{analyzeError}</div>
           </div>
         )}
 
@@ -714,7 +727,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           </div>
         </div>
 
-        {/* NEU: Zubereitung & Backvorgang Formular */}
         <div className="pt-6 border-t border-stone-100">
           <label className="block text-sm font-bold text-stone-800 uppercase tracking-wider mb-4">Zubereitung & Backen</label>
           
@@ -793,24 +805,19 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
     setEditingPrice(null);
   };
 
-  // Rekursive Preisberechnung für verschachtelte Rezepte
   const calculateIngredientCost = (ing) => {
     if (ing.type === 'recipe') {
       const subRecipe = recipes.find(r => r.id === ing.refId);
       if (!subRecipe) return { cost: 0, label: 'Unbekanntes Rezept', basePrice: 0 };
       
-      // Berechne die Kosten des Unter-Rezepts
       let subTotal = 0;
       subRecipe.ingredients.forEach(subIng => {
         subTotal += calculateIngredientCost(subIng).cost;
       });
       
-      // Was kostet 1 kg/Liter/Stück dieser Vorstufe?
-      // Vorstufe Yield wird immer auf 1 kg normiert, wenn nicht anders angegeben
       const subYieldAmt = parseFloat(subRecipe.baseYield) || 1;
       const subCostPerUnit = subTotal / subYieldAmt;
       
-      // Wieviel brauchen wir davon in diesem Rezept?
       const neededAmt = parseFloat(ing.amount) || 0;
       let factor = 0;
       const u = (ing.unit || '').toLowerCase();
@@ -856,7 +863,6 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
 
   const selectedRecipe = recipes.find(r => r.id === selectedRecipeId);
 
-  // Live-Berechnung bei jedem Render (kein Button mehr nötig)
   const calculationData = useMemo(() => {
     if (!selectedRecipe) return null;
     let totalMaterialCost = 0;
@@ -1007,19 +1013,16 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
 }
 
 function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan, setWeeklyPlan }) {
-  const [activeSubTab, setActiveSubTab] = useState('plan'); // 'plan' oder 'log'
+  const [activeSubTab, setActiveSubTab] = useState('plan'); 
   
-  // States für Wochenplan
   const [planRecipeId, setPlanRecipeId] = useState('');
   const [planAmount, setPlanAmount] = useState('');
 
-  // States für Logbuch (NEUES TABELLEN-FORMAT)
   const [showAddLog, setShowAddLog] = useState(false);
   const [logDate, setLogDate] = useState(new Date().toISOString().slice(0,10));
   const [logTags, setLogTags] = useState([]);
   const [customTagInput, setCustomTagInput] = useState('');
   
-  // Die Tabelle für den aktuellen Tag
   const [logItems, setLogItems] = useState([{ id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
 
   const AVAILABLE_TAGS = ['☀️ Sonne', '🌧️ Regen', '❄️ Schnee', '🌡️ Hitze', '🎒 Ferien', '🎊 Feiertag', '🎪 Event'];
@@ -1045,7 +1048,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
     return amt;
   };
 
-  // Magische, rekursive Einkaufsliste
   const shoppingList = useMemo(() => {
     const totals = {};
     
@@ -1109,7 +1111,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
   };
 
   const handleSaveDayLog = () => {
-    // Filtere leere Zeilen raus
     const validItems = logItems.filter(item => item.productName.trim() !== '' && (item.sold !== '' || item.leftover !== ''));
     if (validItems.length === 0) return;
 
@@ -1131,7 +1132,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
     setLogItems([{ id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
   };
 
-  // Prüft, ob mindestens eine Zeile ausfüllt ist, um den Speichern-Button freizugeben
   const hasValidItems = logItems.some(item => item.productName.trim() !== '' && (item.sold !== '' || item.leftover !== ''));
 
   const groupedLogs = useMemo(() => {
@@ -1145,7 +1145,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
           date: dateStr,
           tags: new Set(),
           items: [],
-          originalIds: [] // Zum Löschen der ganzen Gruppe
+          originalIds: []
         };
       }
       
@@ -1153,10 +1153,8 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
       if (log.tags) log.tags.forEach(t => groups[dateStr].tags.add(t));
 
       if (log.items) {
-        // Neues Tabellen-Format
         log.items.forEach(item => groups[dateStr].items.push(item));
       } else {
-        // Altes Format abfangen und umwandeln
         let pName = log.productText;
         if (!pName && log.recipeId) {
           const rec = recipes.find(r => r.id === log.recipeId);
@@ -1195,7 +1193,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
 
       {activeSubTab === 'plan' && (
         <div className="space-y-6 animate-in fade-in">
-          {/* Wochenplan UI bleibt unangetastet */}
           <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
             <h3 className="text-xl font-bold text-stone-800 mb-6 flex items-center"><Activity className="w-5 h-5 mr-2 text-orange-600" /> Wochenmenge festlegen</h3>
             <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -1305,7 +1302,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
                   </div>
                 </div>
 
-                {/* Die neue Tabelle */}
                 <div className="pt-6 border-t border-stone-100">
                   <label className="block text-xs font-bold text-stone-500 uppercase mb-4">Produktions-Liste</label>
                   <div className="border border-stone-200 rounded-2xl overflow-hidden">
@@ -1352,10 +1348,8 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
             </div>
           )}
 
-          {/* Anzeige der gespeicherten Tages-Karten */}
           <div className="space-y-6">
             {groupedLogs.map(group => {
-              // Datum schön formatieren (z.B. "Dienstag, 17. Juni 2026")
               const dateObj = new Date(group.date);
               const dateDisplay = dateObj.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -1489,7 +1483,7 @@ function SettingsView({ user, onLogout, data, setData }) {
           </div>
 
           <div className="pt-6 border-t border-stone-100">
-            <h3 className="text-lg font-black text-stone-800 mb-4">Lokale Daten \& Backup</h3>
+            <h3 className="text-lg font-black text-stone-800 mb-4">Lokale Daten & Backup</h3>
             
             {importStatus && (
               <div className={`p-4 rounded-xl mb-4 font-bold ${importStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
