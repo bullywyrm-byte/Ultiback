@@ -1,861 +1,748 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously,
-  signInWithCustomToken,
-  signOut,
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  initializeFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager,
-  collection,
-  onSnapshot,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  getDocs,
-  setDoc
-} from 'firebase/firestore';
-import { 
-  BookOpen, PackageSearch, CalendarDays, Settings,
-  Wifi, WifiOff, Loader2, Plus, Edit2, X, Trash2, 
-  ChefHat, Scale, Minus, ChevronLeft, ListPlus, 
-  Utensils, Save, ClipboardList,
-  TrendingUp, Download, Upload, AlertTriangle, FileJson, CheckCircle,
-  Calculator, Coins, Percent, Receipt, LogOut, Lock, Mail, Key, Activity, Target
-} from 'lucide-react';
+import { Activity, Box, ListPlus, Settings, Plus, Minus, Search, Trash2, Edit2, X, AlertCircle, RefreshCw, Layers, Check, Thermometer, Clock, FileText } from 'lucide-react';
 
-// ==========================================
-// 1. KONFIGURATION & INITIALISIERUNG
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME",
-  authDomain: "com-example-danielsbackz-ab8de.firebaseapp.com",
-  projectId: "com-example-danielsbackz-ab8de",
-  storageBucket: "com-example-danielsbackz-ab8de.firebasestorage.app",
-  messagingSenderId: "621450545649",
-  appId: "1:621450545649:web:a1a3e227a2b8050e22dc50"
+const useLocalDB = (key, initialValue) => {
+  const [value, setValue] = useState(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.warn(`Error reading localStorage key "${key}":`, error);
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.warn(`Error setting localStorage key "${key}":`, error);
+    }
+  }, [key, value]);
+
+  return [value, setValue];
 };
 
-const SECRET_INVITE_CODE = "31123112";
-const appId = firebaseConfig.projectId;
-console.log("ACHTUNG! Der aktuell geladene Key ist:", firebaseConfig.apiKey);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
-// ==========================================
-// 2. HAUPT-APP KOMPONENTE
-// ==========================================
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("App Crash:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+          <h1 className="text-2xl font-black text-stone-800 mb-2">Hoppla! Ein Fehler ist aufgetreten.</h1>
+          <p className="text-stone-500 mb-6 max-w-md">Die App hat einen unerwarteten Zustand erreicht. Keine Sorge, deine Daten sind sicher lokal gespeichert.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-stone-800 text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg active:scale-95 transition-all"
+          >
+            <RefreshCw className="w-5 h-5 mr-2" /> App neu laden
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  const [user, setUser] = useLocalDB('ulti_back_user', null);
   const [activeTab, setActiveTab] = useState('inventory');
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  
+  // Zentrale Daten-States
+  const [inventory, setInventory] = useLocalDB('ulti_back_inventory', []);
+  const [recipes, setRecipes] = useLocalDB('ulti_back_recipes', []);
+  const [customPrices, setCustomPrices] = useLocalDB('ulti_back_customPrices', {});
+  const [productionLogs, setProductionLogs] = useLocalDB('ulti_back_production', []);
+  const [weeklyPlan, setWeeklyPlan] = useLocalDB('ulti_back_weekly_plan', []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        currentUser.displayEmail = localStorage.getItem('gastro_pro_email') || 'bäcker@lokal.de';
-        setUser(currentUser);
-      } else {
-        setUser(null);
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+  // Login State
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginCode, setLoginCode] = useState('');
+  const [loginError, setLoginError] = useState('');
 
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const handleRegister = () => {
+    if (loginCode !== '31123112') {
+      setLoginError('Ungültiger Registrierungs-Code!');
+      return;
+    }
+    if (!loginEmail.includes('@') || loginPass.length < 6) {
+      setLoginError('Bitte gültige E-Mail und sicheres Passwort eingeben.');
+      return;
+    }
+    setUser({ email: loginEmail, uid: 'local_user_' + Date.now() });
+    setLoginError('');
+  };
 
-  if (authLoading) {
+  const handleLogout = () => {
+    setUser(null);
+  };
+
+  if (!user) {
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center flex-col text-stone-500">
-        <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
-        <p className="text-sm font-semibold tracking-wide uppercase">Lade Arbeitsumgebung...</p>
+      <div className="min-h-screen bg-stone-100 flex items-center justify-center p-6 font-sans">
+        <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl w-full max-w-md border border-stone-200">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
+            <p className="text-orange-600 font-bold mt-1">Registrierung & Login</p>
+          </div>
+          
+          {loginError && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm font-bold border border-red-100 flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {loginError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">E-Mail Adresse</label>
+              <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="bäcker@beispiel.de" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Passwort</label>
+              <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="••••••••" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Geheimer Inhaber-Code</label>
+              <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)} className="w-full bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black tracking-widest text-center" placeholder="CODE EINGEBEN" />
+            </div>
+            
+            <button onClick={handleRegister} className="w-full bg-stone-800 text-white mt-4 py-4 rounded-2xl font-bold shadow-md hover:bg-stone-900 transition-colors text-lg active:scale-95">
+              Account erstellen / Einloggen
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <AuthScreen />;
-  }
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'inventory': return <InventoryView user={user} />;
-      case 'recipes': return <RecipesView user={user} />;
-      case 'production': return <ProductionView user={user} />;
-      case 'calculation': return <CalculationView user={user} />;
-      case 'settings': return <SettingsView user={user} />;
-      default: return null;
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col pb-20 md:pb-0 md:flex-row font-sans text-stone-900 selection:bg-orange-200">
-      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-stone-200/50 px-5 py-4 flex items-center justify-between md:hidden sticky top-0 z-30 transition-all">
-        <h1 className="text-2xl font-black text-stone-800 tracking-tight flex items-center">
-          <ChefHat className="w-6 h-6 mr-2 text-orange-600" />
-          Daniels <span className="text-orange-600 ml-1">Ulti-Back</span>
-        </h1>
-        {isOffline ? (
-          <span className="flex items-center text-[10px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-full shadow-sm"><WifiOff className="w-3.5 h-3.5 mr-1" /> Offline</span>
-        ) : (
-          <span className="flex items-center text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-full shadow-sm"><Wifi className="w-3.5 h-3.5 mr-1" /> Online</span>
-        )}
-      </header>
-
-      <aside className="hidden md:flex flex-col w-72 bg-white border-r border-stone-200 shadow-sm min-h-screen z-20 relative">
-        <div className="p-8 border-b border-stone-100 flex flex-col gap-2">
-          <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mb-2 shadow-sm">
-            <ChefHat className="w-7 h-7" />
-          </div>
-          <h1 className="text-2xl font-black text-stone-800 tracking-tight">Daniels<br/><span className="text-orange-600">Ulti-Back</span></h1>
+    <div className="min-h-screen bg-stone-100 font-sans pb-24 md:pb-0 md:pl-64 flex flex-col">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex flex-col w-64 fixed left-0 top-0 h-screen bg-white border-r border-stone-200 z-50">
+        <div className="p-8">
+          <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Schwind.cc<br/><span className="text-orange-600">Ulti-Back</span></h1>
         </div>
-        <div className="px-8 py-4 bg-stone-50/50">
-           {isOffline ? (
-            <span className="flex items-center text-xs font-bold text-rose-600"><WifiOff className="w-4 h-4 mr-2" /> Offline Modus aktiv</span>
-          ) : (
-            <span className="flex items-center text-xs font-bold text-emerald-600"><Wifi className="w-4 h-4 mr-2" /> Verbunden & Synchronisiert</span>
-          )}
-        </div>
-        <nav className="flex-1 p-5 space-y-2.5">
-          <NavItem icon={<PackageSearch />} label="Lagerbestand" value="inventory" current={activeTab} onClick={setActiveTab} />
-          <NavItem icon={<BookOpen />} label="Rezepte" value="recipes" current={activeTab} onClick={setActiveTab} />
-          <NavItem icon={<CalendarDays />} label="Produktion" value="production" current={activeTab} onClick={setActiveTab} />
-          <NavItem icon={<Calculator />} label="Kalkulation" value="calculation" current={activeTab} onClick={setActiveTab} />
-          <NavItem icon={<Settings />} label="Einstellungen" value="settings" current={activeTab} onClick={setActiveTab} />
+        <nav className="flex-1 px-4 space-y-2">
+          <NavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+          <NavButton icon={ListPlus} label="Rezepte" active={activeTab === 'recipes'} onClick={() => setActiveTab('recipes')} />
+          <NavButton icon={Activity} label="Kalkulation" active={activeTab === 'kalkulation'} onClick={() => setActiveTab('kalkulation')} />
+          <NavButton icon={Layers} label="Produktion" active={activeTab === 'production'} onClick={() => setActiveTab('production')} />
         </nav>
+        <div className="p-4">
+          <NavButton icon={Settings} label="Einstellungen" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+        </div>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 md:max-w-7xl mx-auto w-full overflow-y-auto overflow-x-hidden">
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
-          {renderContent()}
+      {/* Main Content Area */}
+      <main className="flex-1 p-4 md:p-8 md:max-w-6xl w-full mx-auto">
+        {/* Mobile Header */}
+        <div className="md:hidden flex justify-between items-center mb-6 px-2">
+          <h1 className="text-2xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
+          <div className="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full border border-orange-200">v1.0.0</div>
         </div>
+
+        {activeTab === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} />}
+        {activeTab === 'recipes' && <RecipeView recipes={recipes} setRecipes={setRecipes} />}
+        {activeTab === 'kalkulation' && <CalculationView customPrices={customPrices} setCustomPrices={setCustomPrices} recipes={recipes} />}
+        {activeTab === 'production' && <ProductionView productionLogs={productionLogs} setProductionLogs={setProductionLogs} recipes={recipes} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
+        {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{inventory, recipes, customPrices, productionLogs, weeklyPlan}} setData={{setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan}} />}
       </main>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-stone-200/50 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] flex justify-around items-center pb-safe pt-1 z-50">
-        <MobileNavItem icon={<PackageSearch />} label="Lager" value="inventory" current={activeTab} onClick={setActiveTab} />
-        <MobileNavItem icon={<BookOpen />} label="Rezepte" value="recipes" current={activeTab} onClick={setActiveTab} />
-        <MobileNavItem icon={<CalendarDays />} label="Produktion" value="production" current={activeTab} onClick={setActiveTab} />
-        <MobileNavItem icon={<Calculator />} label="Kalkulation" value="calculation" current={activeTab} onClick={setActiveTab} />
-        <MobileNavItem icon={<Settings />} label="Menü" value="settings" current={activeTab} onClick={setActiveTab} />
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 w-full bg-stone-100/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50">
+        <div className="flex justify-around items-center p-2">
+          <MobileNavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+          <MobileNavButton icon={ListPlus} label="Rezepte" active={activeTab === 'recipes'} onClick={() => setActiveTab('recipes')} />
+          <MobileNavButton icon={Activity} label="Preise" active={activeTab === 'kalkulation'} onClick={() => setActiveTab('kalkulation')} />
+          <MobileNavButton icon={Layers} label="Produktion" active={activeTab === 'production'} onClick={() => setActiveTab('production')} />
+          <MobileNavButton icon={Settings} label="Setup" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+        </div>
       </nav>
     </div>
   );
 }
 
-// ==========================================
-// 2.5 AUTHENTIFIZIERUNGS-SCREEN
-// ==========================================
-function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+function NavButton({ icon: Icon, label, active, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center px-4 py-3 rounded-2xl font-bold transition-all ${active ? 'bg-orange-50 text-orange-600' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'}`}
+    >
+      <Icon className={`w-5 h-5 mr-3 ${active ? 'text-orange-600' : 'text-stone-400'}`} />
+      {label}
+    </button>
+  );
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+function MobileNavButton({ icon: Icon, label, active, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex flex-col items-center p-2 min-w-[64px] rounded-xl transition-all ${active ? 'text-orange-600' : 'text-stone-400'}`}
+    >
+      <div className={`p-1.5 rounded-full mb-1 transition-colors ${active ? 'bg-orange-100' : 'bg-transparent'}`}>
+        <Icon className="w-6 h-6" />
+      </div>
+      <span className="text-[10px] font-bold">{label}</span>
+    </button>
+  );
+}
 
-    try {
-      if (!isLogin && inviteCode !== SECRET_INVITE_CODE) {
-        throw new Error("Ungültiger Registrierungs-Code!");
+function InventoryView({ inventory, setInventory }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newItem, setNewItem] = useState({ name: '', stock: '', unit: 'kg', step: '25' });
+
+  const handleAdd = () => {
+    if (!newItem.name) return;
+    const item = { ...newItem, id: Date.now().toString(), stock: parseFloat(newItem.stock) || 0, step: parseFloat(newItem.step) || 1 };
+    setInventory([item, ...inventory]);
+    setNewItem({ name: '', stock: '', unit: 'kg', step: '25' });
+    setShowAdd(false);
+  };
+
+  const updateStock = (id, change) => {
+    setInventory(inventory.map(item => {
+      if (item.id === id) {
+        const newStock = Math.max(0, item.stock + change);
+        return { ...item, stock: newStock };
       }
-      await signInAnonymously(auth);
-      localStorage.setItem('gastro_pro_email', email);
-    } catch (err) {
-      console.error(err);
-      if (err.message === "Ungültiger Registrierungs-Code!") {
-        setError(err.message);
-      } else {
-        setError("Ein Fehler ist aufgetreten. Bitte überprüfe deine Eingaben.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
+      return item;
+    }));
+  };
+
+  const deleteItem = (id) => {
+    setInventory(inventory.filter(item => item.id !== id));
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 selection:bg-orange-200 w-full relative">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-orange-100 rounded-bl-full -z-0 opacity-50 blur-3xl"></div>
-      <div className="absolute bottom-0 left-0 w-64 h-64 bg-rose-100 rounded-tr-full -z-0 opacity-50 blur-3xl"></div>
-
-      <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-stone-200/60 p-8 sm:p-10 animate-in zoom-in-95 duration-500 z-10 relative overflow-hidden">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-50 rounded-3xl flex items-center justify-center text-orange-600 mb-5 shadow-inner border border-orange-200/50">
-            <ChefHat className="w-10 h-10" />
-          </div>
-          <h1 className="text-3xl font-black text-stone-800 tracking-tight text-center">Daniels<br/><span className="text-orange-600">Ulti-Back</span></h1>
+    <div className="max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300">
+      <div className="flex justify-between items-end mb-6">
+        <div>
+          <h2 className="text-3xl font-black text-stone-800 tracking-tight">Lager</h2>
+          <p className="text-stone-500 font-medium">Ultra-Fast Bestandspflege</p>
         </div>
+        <button onClick={() => setShowAdd(!showAdd)} className="bg-orange-600 text-white p-3 rounded-2xl shadow-lg hover:bg-orange-700 active:scale-95 transition-all">
+          {showAdd ? <X className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+        </button>
+      </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center text-rose-700 animate-in slide-in-from-top-2">
-            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
-            <span className="font-bold text-sm leading-tight">{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold text-stone-700 mb-2">E-Mail Adresse</label>
-            <div className="relative">
-              <Mail className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-stone-50 focus:bg-white border border-stone-200 focus:border-orange-500 rounded-2xl outline-none transition-all font-medium text-stone-800" placeholder="bäcker@beispiel.de" />
+      {showAdd && (
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm mb-6 border border-stone-200 animate-in slide-in-from-top-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="col-span-2 md:col-span-1">
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Bezeichnung</label>
+              <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="z.B. Weizenmehl Typ 550" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-stone-700 mb-2">Passwort</label>
-            <div className="relative">
-              <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-              <input required type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-stone-50 focus:bg-white border border-stone-200 focus:border-orange-500 rounded-2xl outline-none transition-all font-medium text-stone-800" placeholder="••••••••" />
-            </div>
-          </div>
-          {!isLogin && (
             <div>
-              <label className="block text-sm font-bold text-stone-700 mb-2">Registrierungs-Code</label>
-              <div className="relative">
-                <Key className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-orange-400" />
-                <input required type="text" value={inviteCode} onChange={e => setInviteCode(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-orange-50/50 border border-orange-200 focus:border-orange-500 rounded-2xl outline-none transition-all font-black tracking-widest text-orange-700" placeholder="GEHEIM-CODE" />
-              </div>
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Bestand</label>
+              <input type="number" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: e.target.value})} placeholder="0" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
             </div>
-          )}
-          <button type="submit" disabled={isLoading} className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-70 text-white py-4 rounded-2xl font-bold shadow-xl shadow-orange-600/20 transition-all flex justify-center items-center mt-6 text-lg">
-            {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : (isLogin ? 'Einloggen' : 'Account erstellen')}
-          </button>
-        </form>
-
-        <div className="mt-8 text-center border-t border-stone-100 pt-6">
-          <button onClick={() => { setIsLogin(!isLogin); setError(''); }} className="mt-2 text-orange-600 hover:text-orange-700 font-black tracking-wide text-sm px-4 py-2 hover:bg-orange-50 rounded-xl">
-            {isLogin ? 'Hier mit Code registrieren' : 'Zurück zum Login'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 3. EINSTELLUNGEN & BACKUP MODUL
-// ==========================================
-function SettingsView({ user }) {
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [importData, setImportData] = useState(null);
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const collections = ['inventory', 'recipes', 'production_logs', 'weekly_standards', 'settings'];
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const backup = { app: 'Daniels_Ulti-Back', timestamp: new Date().toISOString(), data: {} };
-      for (const col of collections) {
-        const snap = await getDocs(collection(db, 'artifacts', appId, 'users', user.uid, col));
-        backup.data[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      }
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; 
-      a.download = `Ulti-Back_Backup_${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      setMessage({ type: 'success', text: 'Backup erfolgreich heruntergeladen.' });
-    } catch (e) {
-      setMessage({ type: 'error', text: 'Fehler beim Erstellen des Backups.' });
-    }
-    setIsExporting(false);
-  };
-
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        if (parsed.app !== 'Daniels_Ulti-Back' && parsed.app !== 'GastroPro') throw new Error("Falsches Format");
-        setImportData(parsed.data);
-        setShowConfirm(true);
-      } catch (err) {
-        setMessage({ type: 'error', text: 'Ungültige Backup-Datei.' });
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const executeImport = async () => {
-    setIsImporting(true);
-    try {
-      for (const col in importData) {
-        for (const item of importData[col]) {
-          const { id, ...data } = item;
-          await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, col, id), data);
-        }
-      }
-      setMessage({ type: 'success', text: 'Daten erfolgreich wiederhergestellt.' });
-      setShowConfirm(false);
-      setImportData(null);
-    } catch (e) {
-      setMessage({ type: 'error', text: 'Fehler beim Importieren.' });
-    }
-    setIsImporting(false);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('gastro_pro_email');
-    signOut(auth);
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-black text-stone-800 tracking-tight">Einstellungen</h2>
-        <button onClick={handleLogout} className="flex items-center px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold rounded-xl transition-colors">
-          <LogOut className="w-5 h-5 mr-2" /> Abmelden
-        </button>
-      </div>
-
-      <div className="bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-center text-orange-800 font-medium">
-        <Mail className="w-5 h-5 mr-3 text-orange-500" /> Angemeldet als: <strong className="ml-2">{user.displayEmail}</strong>
-      </div>
-      
-      {message.text && (
-        <div className={`p-4 rounded-2xl flex items-center shadow-sm ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-          {message.type === 'success' ? <CheckCircle className="w-5 h-5 mr-3" /> : <AlertTriangle className="w-5 h-5 mr-3" />}
-          <span className="font-medium">{message.text}</span>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Einheit</label>
+              <select value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none font-bold">
+                <option value="kg">kg</option><option value="Liter">Liter</option><option value="Stk">Stück</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">1-Klick Schritt</label>
+              <input type="number" value={newItem.step} onChange={e => setNewItem({...newItem, step: e.target.value})} placeholder="25" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+            </div>
+          </div>
+          <button onClick={handleAdd} className="w-full bg-stone-800 text-white px-6 py-4 rounded-xl font-bold hover:bg-stone-900 transition-colors">Produkt anlegen</button>
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mb-6 shadow-inner">
-            <Download className="w-7 h-7" />
-          </div>
-          <h3 className="font-bold text-xl text-stone-800 mb-3">Daten sichern (Export)</h3>
-          <p className="text-stone-500 text-sm mb-8 leading-relaxed">Lade alle deine Rezepte, das Lager und die Produktionsprotokolle als JSON-Datei sicher auf dein Gerät herunter.</p>
-          <button onClick={handleExport} disabled={isExporting} className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-600/20 transition-all flex items-center justify-center">
-            {isExporting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <FileJson className="w-5 h-5 mr-2" />}
-            Backup herunterladen
-          </button>
+      {inventory.length === 0 && !showAdd && (
+        <div className="text-center p-12 bg-white rounded-[2rem] border border-dashed border-stone-300">
+          <Box className="w-16 h-16 text-stone-300 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-stone-700">Dein Lager ist leer</h3>
+          <p className="text-stone-500 mt-2">Klicke oben auf das Plus, um Rohstoffe hinzuzufügen.</p>
         </div>
+      )}
 
-        <div className="bg-white p-8 rounded-3xl border border-stone-200/60 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center text-stone-600 mb-6 shadow-inner">
-            <Upload className="w-7 h-7" />
-          </div>
-          <h3 className="font-bold text-xl text-stone-800 mb-3">Daten wiederherstellen</h3>
-          <p className="text-stone-500 text-sm mb-8 leading-relaxed">Lade ein zuvor erstelltes Backup hoch. Existierende Daten mit gleicher ID werden sicher überschrieben.</p>
-          <label className="block w-full bg-stone-100 hover:bg-stone-200 text-stone-700 text-center py-4 rounded-2xl font-bold cursor-pointer transition-all">
-            Backup-Datei auswählen
-            <input type="file" accept=".json" className="hidden" onChange={handleFile} />
-          </label>
-        </div>
-      </div>
-
-      {showConfirm && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-8 rounded-[2rem] max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-2xl font-black text-center text-stone-800 mb-3 tracking-tight">Achtung!</h3>
-            <p className="text-stone-500 text-center mb-8 leading-relaxed">Möchtest du die Daten aus dem Backup wirklich importieren? Bestehende Daten werden dabei überschrieben.</p>
-            <div className="flex flex-col gap-3">
-              <button onClick={executeImport} disabled={isImporting} className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold flex justify-center items-center transition-all">
-                {isImporting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Ja, Importieren'}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {inventory.map(item => (
+          <div key={item.id} className="bg-white rounded-[2rem] p-2 flex items-center justify-between shadow-sm border border-stone-200 relative overflow-hidden group">
+            {/* Abzieh-Fläche (Riesig) */}
+            <button 
+              onClick={() => updateStock(item.id, -item.step)}
+              className="flex-1 flex flex-col justify-center px-6 py-6 hover:bg-red-50 rounded-2xl transition-colors text-left"
+            >
+              <span className="font-black text-xl text-stone-800 line-clamp-1">{item.name}</span>
+              <div className="flex items-baseline mt-1 space-x-2">
+                <span className={`font-black text-3xl tracking-tighter ${item.stock <= item.step ? 'text-red-500' : 'text-stone-600'}`}>
+                  {item.stock}
+                </span>
+                <span className="text-stone-400 font-bold">{item.unit}</span>
+              </div>
+              <div className="text-xs font-bold text-stone-400 mt-2 bg-stone-100 inline-block px-2 py-1 rounded-md">
+                Klick zieht {item.step}{item.unit} ab
+              </div>
+            </button>
+            
+            <div className="flex flex-col gap-2 p-2 shrink-0">
+              <button onClick={() => updateStock(item.id, item.step)} className="w-14 h-14 bg-stone-100 hover:bg-emerald-100 text-stone-600 hover:text-emerald-600 rounded-2xl flex items-center justify-center transition-colors active:scale-95">
+                <Plus className="w-6 h-6" />
               </button>
-              <button onClick={() => setShowConfirm(false)} className="w-full bg-stone-100 hover:bg-stone-200 text-stone-700 py-4 rounded-2xl font-bold transition-colors">Abbruch</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// 4. INVENTORY MODUL (LAGERBESTAND)
-// ==========================================
-function InventoryView({ user }) {
-  const [items, setItems] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [formData, setFormData] = useState({ name: '', quantity: 0, unit: 'kg', step: 1 });
-
-  useEffect(() => {
-    if (!user) return;
-    const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
-    const unsubscribe = onSnapshot(inventoryRef, (snapshot) => {
-      const fetchedItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      fetchedItems.sort((a, b) => a.name.localeCompare(b.name));
-      setItems(fetchedItems);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleUpdateQuantity = async (item, delta) => {
-    if (!user) return;
-    const newQuantity = Math.max(0, parseFloat((item.quantity + delta).toFixed(3)));
-    try {
-      const itemRef = doc(db, 'artifacts', appId, 'users', user.uid, 'inventory', item.id);
-      await updateDoc(itemRef, { quantity: newQuantity, lastUpdated: new Date().toISOString() });
-    } catch (error) {}
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
-    const dataToSave = {
-      name: formData.name, quantity: parseFloat(formData.quantity),
-      unit: formData.unit, step: parseFloat(formData.step) || 1, lastUpdated: new Date().toISOString()
-    };
-    if (editingItem) {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inventory', editingItem.id), dataToSave);
-    } else {
-      await addDoc(inventoryRef, dataToSave);
-    }
-    setIsModalOpen(false); setEditingItem(null);
-  };
-
-  const handleDelete = async (id) => {
-    if (!user) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inventory', id));
-    setIsModalOpen(false); setEditingItem(null);
-  };
-
-  const openModal = (item = null) => {
-    if (item) {
-      setEditingItem(item); setFormData({ name: item.name, quantity: item.quantity, unit: item.unit, step: item.step || 1 });
-    } else {
-      setEditingItem(null); setFormData({ name: '', quantity: 0, unit: 'kg', step: 1 });
-    }
-    setIsModalOpen(true);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-3xl font-black text-stone-800 tracking-tight">Lagerbestand</h2>
-        <button onClick={() => openModal()} className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-2xl font-bold flex items-center shadow-lg transition-all active:scale-[0.98]">
-          <Plus className="w-5 h-5 mr-1.5" /> Neu
-        </button>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="text-center py-24 bg-white rounded-[2rem] border border-stone-200/60 shadow-sm">
-          <PackageSearch className="w-10 h-10 text-stone-300 mx-auto mb-6" />
-          <p className="text-stone-500 font-medium text-lg">Dein Lager ist noch leer.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {items.map(item => (
-            <div key={item.id} className="flex bg-white rounded-[1.5rem] shadow-sm border border-stone-200/60 overflow-hidden h-32 hover:shadow-md transition-shadow group">
-              <div
-                role="button" tabIndex={0}
-                onClick={() => handleUpdateQuantity(item, -(item.step || 1))}
-                className="flex-1 px-6 py-4 flex flex-col justify-center text-left hover:bg-stone-50 active:bg-orange-50 transition-colors cursor-pointer relative"
-              >
-                <div className="flex items-start justify-between w-full mb-1">
-                  <span className="font-bold text-lg text-stone-800 line-clamp-1 pr-2 pt-1">{item.name}</span>
-                  <button onClick={(e) => { e.stopPropagation(); openModal(item); }} className="p-2.5 text-stone-400 hover:text-orange-600 bg-stone-100 hover:bg-orange-100 rounded-xl transition-colors z-10 opacity-70 group-hover:opacity-100">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-baseline space-x-1.5 mt-auto">
-                  <span className="text-4xl font-black text-stone-900 tracking-tighter">{item.quantity}</span>
-                  <span className="text-lg text-stone-500 font-medium">{item.unit}</span>
-                </div>
-              </div>
-              <button onClick={() => handleUpdateQuantity(item, (item.step || 1))} className="w-24 bg-stone-50 hover:bg-orange-50 active:bg-orange-100 flex flex-col items-center justify-center text-stone-600 hover:text-orange-600 transition-colors border-l border-stone-100">
-                <Plus className="w-8 h-8 mb-1.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Auffüllen</span>
+              <button onClick={() => deleteItem(item.id)} className="w-14 h-14 bg-stone-50 hover:bg-red-100 text-stone-400 hover:text-red-500 rounded-2xl flex items-center justify-center transition-colors active:scale-95">
+                <Trash2 className="w-5 h-5" />
               </button>
             </div>
-          ))}
-        </div>
-      )}
-
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-              <h3 className="font-black text-2xl text-stone-800 tracking-tight">{editingItem ? 'Produkt anpassen' : 'Neu im Lager'}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-3 text-stone-400 hover:text-stone-700 bg-white shadow-sm rounded-full transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleSave} className="p-6 space-y-6">
-              <div><label className="block text-sm font-bold text-stone-700 mb-2">Wie heißt das Produkt?</label>
-              <input required type="text" className="w-full px-5 py-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 font-medium" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-              <div className="flex space-x-4">
-                <div className="flex-1"><label className="block text-sm font-bold text-stone-700 mb-2">Menge</label>
-                <input required type="number" step="any" className="w-full px-5 py-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:border-orange-500 font-bold text-lg" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} /></div>
-                <div className="w-[130px]"><label className="block text-sm font-bold text-stone-700 mb-2">Einheit</label>
-                <select className="w-full px-5 py-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none font-medium" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})}>
-                  <option value="kg">kg</option><option value="g">g</option><option value="L">Liter</option><option value="ml">ml</option><option value="Stk">Stk</option>
-                </select></div>
-              </div>
-              <div><label className="block text-sm font-bold text-stone-700 mb-1">1-Klick Schrittweite (+/-)</label>
-              <input required type="number" step="any" min="0.001" className="w-full px-5 py-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none focus:border-orange-500 font-medium" value={formData.step} onChange={e => setFormData({...formData, step: e.target.value})} /></div>
-              
-              <div className="pt-6 flex space-x-3 mt-4">
-                <button type="submit" className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg transition-all active:scale-[0.98]">Speichern</button>
-                {editingItem && <button type="button" onClick={() => handleDelete(editingItem.id)} className="px-6 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-2xl transition-colors"><Trash2 className="w-6 h-6" /></button>}
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// 5. REZEPTVERWALTUNG MODUL
-// ==========================================
-function RecipesView({ user }) {
-  const [recipes, setRecipes] = useState([]);
-  const [viewMode, setViewMode] = useState('list');
-  const [currentRecipe, setCurrentRecipe] = useState(null);
-  const [targetYield, setTargetYield] = useState(1);
-  const [formData, setFormData] = useState({ title: '', baseYield: 1, yieldUnit: 'Portionen', ingredients: [{ name: '', amount: '', unit: 'g' }], instructions: '' });
-
-  useEffect(() => {
-    if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'recipes'), (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      fetched.sort((a, b) => a.title.localeCompare(b.title));
-      setRecipes(fetched);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const cleaned = formData.ingredients.filter(ing => ing.name.trim() !== '').map(ing => ({ ...ing, amount: parseFloat(ing.amount) || 0 }));
-    const data = { title: formData.title, baseYield: parseFloat(formData.baseYield) || 1, yieldUnit: formData.yieldUnit, ingredients: cleaned, instructions: formData.instructions };
-    if (currentRecipe && viewMode === 'form') {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'recipes', currentRecipe.id), data);
-    } else {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'recipes'), { ...data, createdAt: new Date().toISOString() });
-    }
-    setViewMode('list');
-  };
-
-  const openForm = (r = null) => {
-    setCurrentRecipe(r);
-    setFormData(r ? { ...r } : { title: '', baseYield: 1, yieldUnit: 'Portionen', ingredients: [{ name: '', amount: '', unit: 'g' }], instructions: '' });
-    setViewMode('form');
-  };
-
-  if (viewMode === 'list') return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-3xl font-black text-stone-800 tracking-tight">Rezepte</h2>
-        <button onClick={() => openForm()} className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-2xl font-bold flex items-center shadow-lg transition-all active:scale-[0.98]">
-          <Plus className="w-5 h-5 mr-1.5" /> Neu
-        </button>
-      </div>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {recipes.map(r => (
-          <div key={r.id} onClick={() => { setCurrentRecipe(r); setTargetYield(r.baseYield); setViewMode('detail'); }} className="bg-white p-6 rounded-[1.5rem] shadow-sm border border-stone-200/60 cursor-pointer hover:shadow-md hover:border-orange-300 transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="font-black text-xl text-stone-800 group-hover:text-orange-700 leading-tight">{r.title}</h3>
-              <Utensils className="w-6 h-6 text-stone-200 group-hover:text-orange-200 flex-shrink-0 ml-3"/>
-            </div>
-            <div className="text-xs font-bold text-stone-600 bg-stone-100 inline-block px-3 py-1.5 rounded-lg mb-3">Ertrag: {r.baseYield} {r.yieldUnit}</div>
           </div>
         ))}
       </div>
     </div>
   );
-
-  if (viewMode === 'detail' && currentRecipe) {
-    const scale = targetYield / (currentRecipe.baseYield || 1);
-    return (
-      <div className="max-w-3xl mx-auto space-y-6 pb-8 animate-in slide-in-from-right-8 duration-300">
-        <div className="flex justify-between bg-white/60 backdrop-blur-md p-4 rounded-3xl shadow-sm border border-stone-200/50 sticky top-0 z-10">
-          <button onClick={() => setViewMode('list')} className="flex items-center text-stone-600 hover:text-stone-900 font-bold px-2 py-1"><ChevronLeft className="w-5 h-5 mr-1"/> Zurück</button>
-          <div className="flex gap-2">
-            <button onClick={() => openForm(currentRecipe)} className="p-2.5 text-stone-500 hover:text-orange-600 bg-white rounded-xl shadow-sm"><Edit2 className="w-5 h-5"/></button>
-          </div>
-        </div>
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200/60 relative overflow-hidden">
-          <h2 className="text-4xl font-black text-stone-900 mb-8 tracking-tight">{currentRecipe.title}</h2>
-          <div className="bg-stone-50 p-6 rounded-3xl flex items-center justify-between border border-stone-100">
-            <div className="flex items-center"><Scale className="w-8 h-8 mr-4 text-orange-400" /><div><p className="font-bold text-stone-800 text-lg">Skalieren</p></div></div>
-            <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-stone-200">
-              <button onClick={() => setTargetYield(Math.max(1, targetYield - 1))} className="w-12 h-12 flex items-center justify-center bg-stone-50 hover:bg-orange-50 text-stone-600 hover:text-orange-600 rounded-xl transition-colors"><Minus className="w-6 h-6"/></button>
-              <div className="flex flex-col items-center justify-center w-24">
-                <input type="number" value={targetYield} onChange={(e) => setTargetYield(parseFloat(e.target.value)||1)} className="w-full text-center font-black text-2xl text-stone-800 outline-none bg-transparent" />
-                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{currentRecipe.yieldUnit}</span>
-              </div>
-              <button onClick={() => setTargetYield(targetYield + 1)} className="w-12 h-12 flex items-center justify-center bg-stone-50 hover:bg-orange-50 text-stone-600 hover:text-orange-600 rounded-xl transition-colors"><Plus className="w-6 h-6"/></button>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-200/60 mt-6">
-          <h3 className="text-2xl font-black text-stone-800 mb-6 flex items-center"><ListPlus className="w-6 h-6 mr-3 text-orange-400" /> Zutaten</h3>
-          <ul className="space-y-2">{currentRecipe.ingredients?.map((ing, i) => (
-            <li key={i} className="py-3 px-4 flex justify-between items-center bg-stone-50 rounded-2xl hover:bg-stone-100 transition-colors">
-              <span className="font-bold text-stone-700 text-lg">{ing.name}</span>
-              <div className="flex items-baseline space-x-1.5"><span className="font-black text-xl text-stone-900">{(ing.amount * scale).toFixed(1)}</span><span className="font-bold text-stone-500">{ing.unit}</span></div>
-            </li>
-          ))}</ul>
-        </div>
-      </div>
-    );
-  }
-
-  if (viewMode === 'form') return (
-    <div className="max-w-3xl mx-auto bg-white p-8 rounded-[2rem] shadow-xl border border-stone-200/60 animate-in slide-in-from-bottom-8 duration-300">
-      <div className="flex justify-between items-center mb-8 border-b border-stone-100 pb-4">
-        <h3 className="font-black text-2xl text-stone-800">{currentRecipe ? 'Rezept bearbeiten' : 'Kreiere ein Rezept'}</h3>
-        <button onClick={() => setViewMode('list')} className="p-2 bg-stone-100 text-stone-500 rounded-full"><X className="w-5 h-5"/></button>
-      </div>
-      <form onSubmit={handleSave} className="space-y-6">
-        <div>
-          <label className="block text-sm font-bold text-stone-700 mb-2">Rezept-Titel</label>
-          <input required type="text" value={formData.title} onChange={e=>setFormData({...formData, title: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none font-bold text-lg" />
-        </div>
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-bold text-stone-700 mb-2">Ertrag (Basis-Menge)</label>
-            <input required type="number" value={formData.baseYield} onChange={e=>setFormData({...formData, baseYield: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none font-bold text-lg" />
-          </div>
-          <div className="w-1/3">
-            <label className="block text-sm font-bold text-stone-700 mb-2">Einheit</label>
-            <input required type="text" value={formData.yieldUnit} onChange={e=>setFormData({...formData, yieldUnit: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none font-bold text-lg" />
-          </div>
-        </div>
-        <div className="pt-4">
-          <h4 className="font-bold text-stone-800 mb-4 border-b border-stone-100 pb-2">Die Zutaten</h4>
-          <div className="space-y-3 mb-4">
-            {formData.ingredients.map((ing, idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input type="text" value={ing.name} onChange={e => {const n=[...formData.ingredients]; n[idx].name=e.target.value; setFormData({...formData, ingredients: n})}} className="flex-1 p-3 bg-white border border-stone-200 rounded-xl font-medium" placeholder="Zutat" />
-                <input type="number" step="any" value={ing.amount} onChange={e => {const n=[...formData.ingredients]; n[idx].amount=e.target.value; setFormData({...formData, ingredients: n})}} className="w-24 p-3 bg-white border border-stone-200 rounded-xl font-bold" placeholder="Menge" />
-                <input type="text" value={ing.unit} onChange={e => {const n=[...formData.ingredients]; n[idx].unit=e.target.value; setFormData({...formData, ingredients: n})}} className="w-20 p-3 bg-white border border-stone-200 rounded-xl font-medium" placeholder="g/ml" />
-                <button type="button" onClick={() => {const n=formData.ingredients.filter((_,i)=>i!==idx); setFormData({...formData, ingredients: n})}} className="p-3 text-stone-400 hover:text-rose-500 bg-stone-50 rounded-xl"><X className="w-5 h-5"/></button>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => setFormData({...formData, ingredients: [...formData.ingredients, {name:'', amount:'', unit:'g'}]})} className="w-full py-4 border-2 border-dashed border-stone-200 text-stone-500 font-bold rounded-2xl hover:bg-stone-50 transition-colors flex items-center justify-center">
-            <Plus className="w-5 h-5 mr-2" /> Weitere Zutat
-          </button>
-        </div>
-        <div>
-           <label className="block text-sm font-bold text-stone-700 mb-2">Zubereitungsschritte</label>
-           <textarea value={formData.instructions} onChange={e=>setFormData({...formData, instructions: e.target.value})} className="w-full p-4 bg-stone-50 border border-stone-200 rounded-2xl outline-none font-medium h-40 resize-none" />
-        </div>
-        <div className="pt-6 border-t border-stone-100 flex gap-4">
-          <button type="button" onClick={()=>setViewMode('list')} className="flex-1 py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl">Abbrechen</button>
-          <button type="submit" className="flex-[2] bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg active:scale-[0.98]">Speichern</button>
-        </div>
-      </form>
-    </div>
-  );
 }
 
-// ==========================================
-// 6. PRODUKTIONSMODUL (LOGBUCH)
-// ==========================================
-function ProductionView({ user }) {
-  const [activeSubTab, setActiveSubTab] = useState('log');
-  const [logs, setLogs] = useState([]);
-  const [isEditingLog, setIsEditingLog] = useState(false);
-  const [logForm, setLogForm] = useState({ date: new Date().toISOString().split('T')[0], comment: '', items: [] });
-  const [newItem, setNewItem] = useState({ name: '', produced: '', returned: '' });
-  const [weeklyStandards, setWeeklyStandards] = useState([]);
-  const [newStandardName, setNewStandardName] = useState('');
-  const [recipeNames, setRecipeNames] = useState([]);
+function RecipeView({ recipes, setRecipes }) {
+  const [editingRecipe, setEditingRecipe] = useState(null);
+  const [scalingMuliplier, setScalingMultiplier] = useState({});
 
-  useEffect(() => {
-    if (!user) return;
-    const unsubLogs = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'production_logs'), orderBy('date', 'desc')), (snap) => setLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-    const unsubWeekly = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'weekly_standards'), (snap) => {
-      const standards = snap.docs.map(d => ({id: d.id, ...d.data()}));
-      standards.sort((a,b) => a.name.localeCompare(b.name));
-      setWeeklyStandards(standards);
-    });
-    const unsubRecipes = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'recipes'), (snap) => setRecipeNames(snap.docs.map(d => d.data().title)));
-    return () => { unsubLogs(); unsubWeekly(); unsubRecipes(); };
-  }, [user]);
-
-  const handleAddLogItem = (e) => {
-    e.preventDefault();
-    if (!newItem.name) return;
-    setLogForm(prev => ({ ...prev, items: [...prev.items, { ...newItem, produced: Number(newItem.produced)||0, returned: Number(newItem.returned)||0 }] }));
-    setNewItem({ name: '', produced: '', returned: '' });
+  const handleCreate = () => {
+    const newRecipe = {
+      id: Date.now().toString(),
+      title: 'Neues Rezept',
+      baseYield: 10,
+      yieldUnit: 'Stück',
+      ingredients: [],
+      instructions: '',
+      bakeTemp: '',
+      bakeTime: ''
+    };
+    setEditingRecipe(newRecipe);
   };
 
-  const saveLog = async () => {
-    if (!user) return;
-    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'production_logs'), logForm);
-    setIsEditingLog(false);
-    setLogForm({ date: new Date().toISOString().split('T')[0], comment: '', items: [] });
+  const saveRecipe = (recipe) => {
+    if (recipes.find(r => r.id === recipe.id)) {
+      setRecipes(recipes.map(r => r.id === recipe.id ? recipe : r));
+    } else {
+      setRecipes([recipe, ...recipes]);
+    }
+    setEditingRecipe(null);
   };
 
-  const addWeeklyStandard = async (e) => {
-    e.preventDefault();
-    if (!user || !newStandardName.trim()) return;
-    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'weekly_standards'), { name: newStandardName.trim(), amount: 0 });
-    setNewStandardName('');
+  const deleteRecipe = (id) => {
+    setRecipes(recipes.filter(r => r.id !== id));
+    if(editingRecipe?.id === id) setEditingRecipe(null);
   };
 
-  const updateWeeklyAmount = async (id, newAmount) => {
-    if (!user) return;
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'weekly_standards', id), { amount: Number(newAmount)||0 });
-  };
-
-  const deleteWeeklyStandard = async (id) => {
-    if (!user) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'weekly_standards', id));
-  };
+  if (editingRecipe) {
+    return <RecipeEditor 
+      recipe={editingRecipe} 
+      allRecipes={recipes}
+      onSave={saveRecipe} 
+      onCancel={() => setEditingRecipe(null)} 
+    />;
+  }
 
   return (
-    <div className="space-y-8">
-      <div className="flex bg-stone-200/60 p-1.5 rounded-[1.25rem] w-full max-w-sm mx-auto md:mx-0 shadow-inner">
-        <button onClick={() => setActiveSubTab('log')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeSubTab==='log' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500'}`}>Tages-Logbuch</button>
-        <button onClick={() => setActiveSubTab('weekly')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeSubTab==='weekly' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500'}`}>Wochen-Standard</button>
+    <div className="max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300 pb-8">
+      <div className="flex justify-between items-end mb-6">
+        <div>
+          <h2 className="text-3xl font-black text-stone-800 tracking-tight">Rezepte</h2>
+          <p className="text-stone-500 font-medium">Intelligente Skalierung</p>
+        </div>
+        <button onClick={handleCreate} className="bg-orange-600 text-white px-5 py-3 rounded-2xl shadow-lg hover:bg-orange-700 active:scale-95 transition-all font-bold flex items-center">
+          <Plus className="w-5 h-5 mr-2" /> Neu
+        </button>
       </div>
 
-      {activeSubTab === 'log' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-3xl font-black text-stone-800 tracking-tight">Tages-Protokolle</h2>
-            <button onClick={() => setIsEditingLog(true)} className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-2xl font-bold flex items-center shadow-lg transition-all active:scale-[0.98]">
-              <Plus className="w-5 h-5 mr-1.5" /> Neuer Tag
-            </button>
-          </div>
+      {recipes.length === 0 && (
+        <div className="text-center p-12 bg-white rounded-[2rem] border border-dashed border-stone-300">
+          <ListPlus className="w-16 h-16 text-stone-300 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-stone-700">Noch keine Rezepte</h3>
+          <p className="text-stone-500 mt-2">Lege dein erstes Rezept an, um die Kalkulation zu nutzen.</p>
+        </div>
+      )}
 
-          {isEditingLog && (
-            <div className="bg-white p-8 rounded-[2rem] border border-stone-200/60 shadow-xl animate-in slide-in-from-top-4 duration-300">
-              <h3 className="font-black text-2xl mb-6 text-stone-800">Neuen Merkzettel anlegen</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <input type="date" value={logForm.date} onChange={e=>setLogForm({...logForm, date: e.target.value})} className="p-4 bg-stone-50 border border-stone-200 rounded-2xl font-bold text-stone-700 outline-none" />
-                <input type="text" placeholder="Kommentar (z.B. Stadtfest)" value={logForm.comment} onChange={e=>setLogForm({...logForm, comment: e.target.value})} className="p-4 bg-stone-50 border border-stone-200 rounded-2xl font-medium outline-none" />
-              </div>
-              <form onSubmit={handleAddLogItem} className="bg-stone-50 p-6 rounded-3xl border border-stone-200 mb-8">
-                <h4 className="font-bold text-stone-800 mb-4">Produkte hinzufügen</h4>
-                <div className="flex flex-col md:flex-row gap-3">
-                  <input required type="text" list="recipes-list" placeholder="Produktname" value={newItem.name} onChange={e=>setNewItem({...newItem, name: e.target.value})} className="flex-1 p-4 bg-white border border-stone-200 rounded-2xl font-medium outline-none" />
-                  <datalist id="recipes-list">{recipeNames.map(n => <option key={n} value={n}/>)}</datalist>
-                  <input required type="number" placeholder="Produziert" value={newItem.produced} onChange={e=>setNewItem({...newItem, produced: e.target.value})} className="w-full md:w-32 p-4 bg-white border border-stone-200 rounded-2xl font-bold outline-none text-emerald-600" />
-                  <input required type="number" placeholder="Retoure" value={newItem.returned} onChange={e=>setNewItem({...newItem, returned: e.target.value})} className="w-full md:w-32 p-4 bg-white border border-stone-200 rounded-2xl font-bold outline-none text-rose-600" />
-                  <button type="submit" className="bg-stone-800 hover:bg-stone-900 text-white px-6 py-4 rounded-2xl font-bold transition-colors">Dazu</button>
+      <div className="grid grid-cols-1 gap-6">
+        {recipes.map(recipe => {
+          const currentScale = scalingMuliplier[recipe.id] || recipe.baseYield;
+          const factor = currentScale / recipe.baseYield;
+
+          return (
+            <div key={recipe.id} className="bg-white rounded-[2rem] p-6 shadow-sm border border-stone-200">
+              <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4 border-b border-stone-100 pb-6">
+                <div>
+                  <h3 className="text-2xl font-black text-stone-800">{recipe.title}</h3>
+                  <p className="text-stone-400 font-medium text-sm mt-1">Basis: {recipe.baseYield} {recipe.yieldUnit}</p>
                 </div>
-              </form>
-              {logForm.items.length > 0 && (
-                <ul className="mb-8 space-y-2">
-                  {logForm.items.map((item, idx) => (
-                    <li key={idx} className="p-4 flex justify-between bg-stone-50 rounded-2xl items-center border border-stone-100">
-                      <span className="font-bold text-stone-800 text-lg">{item.name}</span>
-                      <div className="flex space-x-6 text-sm">
-                        <span className="text-emerald-600 font-black text-lg bg-emerald-50 px-3 py-1 rounded-xl">Prod: {item.produced}</span>
-                        <span className="text-rose-600 font-black text-lg bg-rose-50 px-3 py-1 rounded-xl">Ret: {item.returned}</span>
-                      </div>
+                <div className="flex items-center gap-3 bg-stone-50 p-2 rounded-2xl border border-stone-100">
+                  <span className="text-xs font-bold text-stone-400 uppercase ml-2 tracking-wider">Ziel-Menge:</span>
+                  <input 
+                    type="number" 
+                    value={currentScale}
+                    onChange={(e) => setScalingMultiplier({...scalingMuliplier, [recipe.id]: parseFloat(e.target.value) || 1})}
+                    className="w-24 bg-white border border-stone-200 rounded-xl px-3 py-2 text-center font-black text-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                  <span className="text-sm font-bold text-stone-500 mr-2">{recipe.yieldUnit}</span>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <ul className="space-y-2">
+                  {recipe.ingredients.map((ing, idx) => (
+                    <li key={idx} className="flex justify-between items-center py-2 px-3 hover:bg-stone-50 rounded-xl transition-colors">
+                      <span className="font-bold text-stone-700 flex items-center">
+                        {ing.type === 'recipe' && <Layers className="w-4 h-4 mr-2 text-orange-500" />}
+                        {ing.type === 'recipe' ? (recipes.find(r => r.id === ing.refId)?.title || 'Unbekanntes Rezept') : ing.name}
+                      </span>
+                      <span className="font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
+                        {parseFloat((ing.amount * factor).toFixed(2))} <span className="text-xs text-orange-800/60 ml-1">{ing.unit}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
-              )}
-              <div className="flex gap-4 border-t border-stone-100 pt-6">
-                <button onClick={() => setIsEditingLog(false)} className="flex-1 p-4 bg-stone-100 hover:bg-stone-200 font-bold rounded-2xl text-stone-600 transition-colors">Abbruch</button>
-                <button onClick={saveLog} className="flex-[2] p-4 bg-orange-600 hover:bg-orange-700 text-white font-bold text-lg rounded-2xl shadow-lg active:scale-[0.98]">Speichern</button>
               </div>
-            </div>
-          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {logs.map(log => (
-              <div key={log.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-stone-200/60 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-black text-xl text-stone-800">{new Date(log.date).toLocaleDateString('de-DE')}</h3>
-                  <div className="bg-orange-50 p-2 rounded-xl text-orange-500"><ClipboardList className="w-5 h-5" /></div>
-                </div>
-                {log.comment && <p className="text-sm font-medium text-stone-600 mb-6 bg-stone-50 p-3 rounded-xl border border-stone-100">"{log.comment}"</p>}
-                <div className="space-y-3">
-                  {log.items?.map((item, i) => {
-                    const sold = item.produced - item.returned;
-                    const quote = item.produced > 0 ? Math.round((sold / item.produced) * 100) : 0;
-                    return (
-                      <div key={i} className="flex flex-col sm:flex-row sm:justify-between sm:items-center text-sm border-b border-stone-100 pb-3 last:border-0">
-                        <span className="font-bold text-stone-800 text-base mb-1 sm:mb-0">{item.name}</span>
-                        <div className="flex items-center space-x-4 bg-stone-50 px-3 py-1.5 rounded-lg self-start sm:self-auto">
-                          <span className="text-stone-500 font-medium">{item.produced}x prod.</span>
-                          <span className={`font-black w-14 text-right text-lg ${quote >= 90 ? 'text-emerald-500' : quote >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>{quote}%</span>
+              {/* NEU: Zubereitung & Backvorgang Anzeige */}
+              {(recipe.bakeTemp || recipe.bakeTime || recipe.instructions) && (
+                <div className="mb-6 bg-stone-50 rounded-2xl p-4 border border-stone-100">
+                  <div className="flex flex-wrap gap-4 mb-4">
+                    {recipe.bakeTemp && (
+                      <div className="flex items-center text-stone-600 bg-white px-3 py-2 rounded-xl border border-stone-200 shadow-sm">
+                        <Thermometer className="w-5 h-5 mr-2 text-orange-500" />
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">Backtemperatur</span>
+                          <span className="font-bold">{recipe.bakeTemp}</span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeSubTab === 'weekly' && (
-        <div className="space-y-6 max-w-3xl">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-3xl font-black text-stone-800 tracking-tight">Wochen-Referenz</h2>
-          </div>
-          <div className="bg-white rounded-[2rem] border border-stone-200/60 shadow-sm overflow-hidden">
-            <ul className="divide-y divide-stone-100">
-              {weeklyStandards.map(std => (
-                <li key={std.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-stone-50 transition-colors gap-3">
-                  <span className="font-bold text-stone-800 text-lg">{std.name}</span>
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
-                    <input 
-                      type="number" 
-                      defaultValue={std.amount} 
-                      onBlur={(e) => updateWeeklyAmount(std.id, e.target.value)}
-                      className="w-24 p-3 text-center font-black text-xl text-orange-700 bg-orange-50 border border-orange-100 rounded-xl outline-none"
-                    />
-                    <button onClick={() => deleteWeeklyStandard(std.id)} className="p-3 text-stone-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"><Trash2 className="w-5 h-5"/></button>
+                    )}
+                    {recipe.bakeTime && (
+                      <div className="flex items-center text-stone-600 bg-white px-3 py-2 rounded-xl border border-stone-200 shadow-sm">
+                        <Clock className="w-5 h-5 mr-2 text-orange-500" />
+                        <div>
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">Backzeit</span>
+                          <span className="font-bold">{recipe.bakeTime}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ul>
-            <form onSubmit={addWeeklyStandard} className="p-5 bg-stone-50 border-t border-stone-100 flex flex-col sm:flex-row gap-3">
-              <input type="text" placeholder="Neues Produkt eingeben..." value={newStandardName} onChange={e=>setNewStandardName(e.target.value)} className="flex-1 p-4 border border-stone-200 rounded-2xl outline-none font-medium" />
-              <button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 font-bold rounded-2xl shadow-md active:scale-95 text-lg">Dazu</button>
-            </form>
-          </div>
-        </div>
-      )}
+                  {recipe.instructions && (
+                    <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                      <h4 className="flex items-center text-xs font-bold uppercase tracking-wider text-stone-400 mb-2">
+                        <FileText className="w-4 h-4 mr-2" /> Aufarbeitung & Hinweise
+                      </h4>
+                      <p className="text-stone-700 whitespace-pre-wrap font-medium text-sm">{recipe.instructions}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
+                <button onClick={() => setEditingRecipe(recipe)} className="flex items-center px-4 py-2 text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-xl font-bold transition-colors">
+                  <Edit2 className="w-4 h-4 mr-2" /> Bearbeiten
+                </button>
+                <button onClick={() => deleteRecipe(recipe.id)} className="flex items-center px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold transition-colors">
+                  <Trash2 className="w-4 h-4 mr-2" /> Löschen
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-// ==========================================
-// 7. NEUES KALKULATIONS MODUL (Echtzeit & Break-Even)
-// ==========================================
-function CalculationView({ user }) {
-  const [recipes, setRecipes] = useState([]);
+function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
+  const [edited, setEdited] = useState({...recipe});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState('');
+
+  const updateField = (field, value) => setEdited({...edited, [field]: value});
+
+  const addIngredient = () => {
+    setEdited({...edited, ingredients: [...edited.ingredients, { type: 'ingredient', name: '', amount: '', unit: 'g' }]});
+  };
+
+  const addRecipeReference = () => {
+    setEdited({...edited, ingredients: [...edited.ingredients, { type: 'recipe', refId: '', amount: '', unit: 'kg' }]});
+  };
+
+  const updateIngredient = (index, field, value) => {
+    const newIngs = [...edited.ingredients];
+    newIngs[index][field] = value;
+    setEdited({...edited, ingredients: newIngs});
+  };
+
+  const removeIngredient = (index) => {
+    setEdited({...edited, ingredients: edited.ingredients.filter((_, i) => i !== index)});
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsAnalyzing(true);
+    setAnalyzeError('');
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        try {
+          const base64Data = reader.result.split(',')[1];
+          const mimeType = file.type; 
+
+          const payload = {
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: "Analysiere dieses Rezept (Bild oder Dokument). Extrahiere den Namen des Rezepts, die Zielmenge (Ertrag) und die Einheiten. Erstelle eine strukturierte Liste der Zutaten. Wenn keine Ertragsmenge erkennbar ist, nimm 10 und Stück. Einheit für Zutaten muss zwingend auf eines von g, kg, ml, Liter, Stk, EL, TL formatiert werden." },
+                  {
+                    inlineData: {
+                      mimeType: mimeType,
+                      data: base64Data
+                    }
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: "OBJECT",
+                properties: {
+                  title: { type: "STRING", description: "Name des Rezepts" },
+                  baseYield: { type: "NUMBER", description: "Menge des Ertrags, nur Zahl" },
+                  yieldUnit: { type: "STRING", description: "Einheit des Ertrags (Stk, Laibe, etc.)" },
+                  instructions: { type: "STRING", description: "Details zur Aufarbeitung, Zubereitung oder Knetzeit" },
+                  bakeTemp: { type: "STRING", description: "Backtemperatur (z.B. '240°C fallend auf 210°C')" },
+                  bakeTime: { type: "STRING", description: "Backzeit (z.B. '45 Min')" },
+                  ingredients: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        name: { type: "STRING", description: "Name der Zutat" },
+                        amount: { type: "NUMBER", description: "Menge als Zahl" },
+                        unit: { type: "STRING", description: "Einheit (g, kg, ml, Liter, Stk)" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          };
+
+          const apiKey = ""; // API Key is dynamically injected in this environment
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await response.json();
+          if (result.candidates && result.candidates.length > 0) {
+            const jsonText = result.candidates[0].content.parts[0].text;
+            const data = JSON.parse(jsonText);
+
+            // Mappe die KI-Antwort in unser App-Format
+            const newIngredients = (data.ingredients || []).map(ing => ({
+              type: 'ingredient',
+              name: ing.name || 'Unbekannte Zutat',
+              amount: ing.amount || 0,
+              unit: ing.unit || 'g'
+            }));
+
+            // Aktualisiere den Editor-State
+            setEdited(prev => ({
+              ...prev,
+              title: data.title && prev.title === 'Neues Rezept' ? data.title : prev.title,
+              baseYield: data.baseYield || prev.baseYield,
+              yieldUnit: data.yieldUnit || prev.yieldUnit,
+              instructions: data.instructions || prev.instructions,
+              bakeTemp: data.bakeTemp || prev.bakeTemp,
+              bakeTime: data.bakeTime || prev.bakeTime,
+              ingredients: [...prev.ingredients, ...newIngredients]
+            }));
+          } else {
+            setAnalyzeError("Die Datei konnte nicht gelesen werden.");
+          }
+        } catch (error) {
+          console.error(error);
+          setAnalyzeError("Verarbeitungsfehler der KI.");
+        } finally {
+          setIsAnalyzing(false);
+          e.target.value = ''; // Reset Input
+        }
+      };
+    } catch (err) {
+      setAnalyzeError("Dateifehler beim Einlesen.");
+      setIsAnalyzing(false);
+    }
+  };
+
+  const availableRecipes = allRecipes.filter(r => r.id !== edited.id);
+
+  return (
+    <div className="max-w-3xl mx-auto bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200 animate-in slide-in-from-bottom-4">
+      <div className="flex justify-between items-center mb-8 border-b border-stone-100 pb-4">
+        <h3 className="text-2xl font-black text-stone-800">Rezept bearbeiten</h3>
+        <button onClick={onCancel} className="p-2 text-stone-400 hover:bg-stone-100 rounded-full transition-colors"><X className="w-6 h-6" /></button>
+      </div>
+
+      <div className="space-y-6">
+        
+        {/* KI Scan Bereich */}
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex-1">
+            <h4 className="font-bold text-orange-900 flex items-center">
+              <Activity className="w-5 h-5 mr-2" /> PDF oder Foto importieren
+            </h4>
+            <p className="text-sm text-orange-800/70 mt-1">Lade ein Rezept hoch. Unsere KI liest Text und Zahlen aus und trägt sie automatisch unten ein.</p>
+          </div>
+          
+          <div className="w-full md:w-auto">
+            {isAnalyzing ? (
+              <div className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center opacity-80 cursor-wait">
+                <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Analysiere Dokument...
+              </div>
+            ) : (
+              <label className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-orange-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center whitespace-nowrap">
+                <Plus className="w-5 h-5 mr-2" /> Rezept scannen
+                <input 
+                  type="file" 
+                  accept="application/pdf, image/jpeg, image/png" 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                />
+              </label>
+            )}
+          </div>
+        </div>
+        
+        {analyzeError && (
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-bold border border-red-200 flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" /> {analyzeError}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Rezept Name</label>
+          <input type="text" value={edited.title} onChange={e => updateField('title', e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-xl" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Basis-Ertrag (Menge)</label>
+            <input type="number" value={edited.baseYield} onChange={e => updateField('baseYield', parseFloat(e.target.value) || 1)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Einheit Ertrag</label>
+            <input type="text" value={edited.yieldUnit} onChange={e => updateField('yieldUnit', e.target.value)} placeholder="z.B. Stück, Laibe" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-stone-100">
+          <div className="flex justify-between items-center mb-4">
+            <label className="block text-sm font-bold text-stone-800 uppercase tracking-wider">Zutaten & Vorstufen</label>
+          </div>
+          
+          <div className="space-y-3 mb-6">
+            {edited.ingredients.map((ing, idx) => (
+              <div key={idx} className={`flex flex-wrap md:flex-nowrap gap-2 items-center p-2 rounded-xl border ${ing.type === 'recipe' ? 'bg-orange-50/50 border-orange-100' : 'bg-stone-50 border-stone-200'}`}>
+                {ing.type === 'recipe' ? (
+                  <div className="flex-1 min-w-[200px] flex gap-2">
+                    <Layers className="w-10 h-10 p-2 bg-orange-100 text-orange-600 rounded-lg shrink-0" />
+                    <select 
+                      value={ing.refId} 
+                      onChange={e => updateIngredient(idx, 'refId', e.target.value)}
+                      className="flex-1 bg-white border border-orange-200 px-3 py-2 rounded-lg font-bold outline-none text-orange-900"
+                    >
+                      <option value="">Vorstufe auswählen...</option>
+                      {availableRecipes.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <input type="text" placeholder="Zutat" value={ing.name} onChange={e => updateIngredient(idx, 'name', e.target.value)} className="flex-1 min-w-[150px] bg-white border border-stone-200 px-3 py-2 rounded-lg font-bold outline-none" />
+                )}
+                
+                <div className="flex gap-2 ml-auto">
+                  <input type="number" placeholder="Menge" value={ing.amount} onChange={e => updateIngredient(idx, 'amount', e.target.value)} className="w-20 bg-white border border-stone-200 px-3 py-2 rounded-lg font-bold text-center outline-none" />
+                  <select value={ing.unit} onChange={e => updateIngredient(idx, 'unit', e.target.value)} className="w-20 bg-white border border-stone-200 px-2 py-2 rounded-lg font-bold outline-none">
+                    <option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="Liter">L</option><option value="Stk">Stk</option>
+                  </select>
+                  <button onClick={() => removeIngredient(idx)} className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-5 h-5" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button onClick={addIngredient} className="flex-1 flex items-center justify-center border-2 border-dashed border-stone-300 hover:border-stone-400 text-stone-600 px-4 py-3 rounded-xl font-bold transition-colors">
+              <Plus className="w-4 h-4 mr-2" /> Zutat (Manuell)
+            </button>
+            <button onClick={addRecipeReference} className="flex-1 flex items-center justify-center border-2 border-dashed border-orange-200 hover:border-orange-400 text-orange-600 bg-orange-50/50 px-4 py-3 rounded-xl font-bold transition-colors">
+              <Layers className="w-4 h-4 mr-2" /> Vorstufe (Rezept)
+            </button>
+          </div>
+        </div>
+
+        {/* NEU: Zubereitung & Backvorgang Formular */}
+        <div className="pt-6 border-t border-stone-100">
+          <label className="block text-sm font-bold text-stone-800 uppercase tracking-wider mb-4">Zubereitung & Backen</label>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Backtemperatur</label>
+              <div className="relative">
+                <Thermometer className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input type="text" value={edited.bakeTemp || ''} onChange={e => updateField('bakeTemp', e.target.value)} placeholder="z.B. 240°C" className="w-full bg-stone-50 border border-stone-200 pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Backzeit</label>
+              <div className="relative">
+                <Clock className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input type="text" value={edited.bakeTime || ''} onChange={e => updateField('bakeTime', e.target.value)} placeholder="z.B. 45 Min" className="w-full bg-stone-50 border border-stone-200 pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Aufarbeitung & Hinweise</label>
+            <textarea 
+              value={edited.instructions || ''} 
+              onChange={e => updateField('instructions', e.target.value)} 
+              placeholder="Teigruhe, Knetzeiten, Aufarbeitungsschritte..." 
+              rows={4}
+              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold resize-y" 
+            />
+          </div>
+        </div>
+
+        <button onClick={() => onSave(edited)} className="w-full bg-stone-800 text-white px-6 py-4 rounded-xl font-black text-lg hover:bg-stone-900 shadow-md active:scale-95 transition-all mt-8">
+          Rezept speichern
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CalculationView({ customPrices, setCustomPrices, recipes }) {
   const [selectedRecipeId, setSelectedRecipeId] = useState('');
   const [markup, setMarkup] = useState(300);
-  const [fixedAddition, setFixedAddition] = useState(''); // NEU: Fixer Euro-Betrag
-  
-  const [customPrices, setCustomPrices] = useState({});
+  const [fixedAddition, setFixedAddition] = useState('');
   const [editingPrice, setEditingPrice] = useState(null);
   const [tempPrice, setTempPrice] = useState('');
 
@@ -865,56 +752,75 @@ function CalculationView({ user }) {
     'salz': 0.40, 'hefe': 2.50, 'ei': 0.25, 'sauerteig': 0.80
   };
 
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'recipes'), (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      fetched.sort((a, b) => a.title.localeCompare(b.title));
-      setRecipes(fetched);
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'prices'), (docSnap) => {
-      if (docSnap.exists()) setCustomPrices(docSnap.data());
-    });
-    return () => unsub();
-  }, [user]);
-
-  const saveCustomPrice = async (ingredientName, priceStr) => {
-    if (!user) return;
-    const newPrice = parseFloat(priceStr);
-    if (isNaN(newPrice)) return;
-    const updatedPrices = { ...customPrices, [ingredientName]: newPrice };
-    setCustomPrices(updatedPrices);
-    setEditingPrice(null);
-    try {
-      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'prices'), updatedPrices, { merge: true });
-    } catch (e) { console.error("Fehler beim Speichern:", e); }
+  const handleMarkupChange = (e) => {
+    let val = parseInt(e.target.value.replace(/\D/g, ''), 10);
+    if (isNaN(val)) val = '';
+    else if (val < 1) val = 1;
+    else if (val > 999) val = 999;
+    setMarkup(val);
   };
 
-  // ECHTZEIT-BERECHNUNG (ohne Button-Klick)
-  const calculationData = useMemo(() => {
-    const selectedRecipe = recipes.find(r => r.id === selectedRecipeId);
-    if (!selectedRecipe || !selectedRecipe.ingredients) return null;
+  const handleFixedBlur = () => {
+    const val = parseFloat(fixedAddition);
+    if (!isNaN(val)) {
+      setFixedAddition(val.toFixed(2));
+    } else {
+      setFixedAddition('');
+    }
+  };
 
-    let totalMaterialCost = 0;
-    const calculatedIngredients = selectedRecipe.ingredients.map(ing => {
-      const u = ing.unit.toLowerCase();
-      const amt = parseFloat(ing.amount) || 0;
+  const saveCustomPrice = (ingredientName, priceStr) => {
+    const newPrice = parseFloat(priceStr);
+    if (!isNaN(newPrice)) {
+      setCustomPrices({ ...customPrices, [ingredientName]: newPrice });
+    }
+    setEditingPrice(null);
+  };
+
+  // Rekursive Preisberechnung für verschachtelte Rezepte
+  const calculateIngredientCost = (ing) => {
+    if (ing.type === 'recipe') {
+      const subRecipe = recipes.find(r => r.id === ing.refId);
+      if (!subRecipe) return { cost: 0, label: 'Unbekanntes Rezept', basePrice: 0 };
       
+      // Berechne die Kosten des Unter-Rezepts
+      let subTotal = 0;
+      subRecipe.ingredients.forEach(subIng => {
+        subTotal += calculateIngredientCost(subIng).cost;
+      });
+      
+      // Was kostet 1 kg/Liter/Stück dieser Vorstufe?
+      // Vorstufe Yield wird immer auf 1 kg normiert, wenn nicht anders angegeben
+      const subYieldAmt = parseFloat(subRecipe.baseYield) || 1;
+      const subCostPerUnit = subTotal / subYieldAmt;
+      
+      // Wieviel brauchen wir davon in diesem Rezept?
+      const neededAmt = parseFloat(ing.amount) || 0;
       let factor = 0;
-      if (u === 'g' || u === 'ml') factor = amt / 1000;
-      else if (u === 'kg' || u === 'l' || u === 'liter') factor = amt;
-      else if (u === 'stk' || u === 'stück' || u === 'stueck') factor = amt;
-      else if (u === 'el') factor = amt * 0.015; 
-      else if (u === 'tl') factor = amt * 0.005; 
-      else factor = amt / 1000;
+      const u = (ing.unit || '').toLowerCase();
+      if (u === 'g' || u === 'ml') factor = neededAmt / 1000;
+      else if (u === 'kg' || u === 'l' || u === 'liter') factor = neededAmt;
+      else factor = neededAmt;
 
-      const searchName = ing.name.toLowerCase();
-      let basePrice = 1.50; 
+      return { 
+        cost: factor * subCostPerUnit, 
+        label: subRecipe.title,
+        basePrice: subCostPerUnit,
+        isRecipe: true
+      };
+    } else {
+      const neededAmt = parseFloat(ing.amount) || 0;
+      const u = (ing.unit || '').toLowerCase();
+      let factor = 0;
+      
+      if (u === 'g' || u === 'ml') factor = neededAmt / 1000;
+      else if (u === 'kg' || u === 'l' || u === 'liter' || u === 'stk') factor = neededAmt;
+      else if (u === 'el') factor = neededAmt * 0.015;
+      else if (u === 'tl') factor = neededAmt * 0.005;
+      else factor = neededAmt / 1000;
+
+      const searchName = (ing.name || '').toLowerCase();
+      let basePrice = 1.50;
       let isCustom = false;
 
       if (customPrices[ing.name] !== undefined) {
@@ -928,238 +834,584 @@ function CalculationView({ user }) {
           }
         }
       }
-
-      const cost = factor * basePrice;
-      totalMaterialCost += cost;
-
-      return { ...ing, cost, basePrice, isCustom };
-    });
-
-    const pieceCost = totalMaterialCost / selectedRecipe.baseYield;
-    const fixedAddNum = parseFloat(fixedAddition) || 0;
-    
-    // NEUE FORMEL: Stückkosten * (Prozent/100) + Fix-Betrag
-    const suggestedPrice = (pieceCost * (markup / 100)) + fixedAddNum;
-    const breakEven = suggestedPrice > 0 ? Math.ceil(totalMaterialCost / suggestedPrice) : 0;
-
-    return {
-      recipe: selectedRecipe,
-      ingredients: calculatedIngredients,
-      totalCost: totalMaterialCost,
-      pieceCost: pieceCost,
-      suggestedPrice: suggestedPrice,
-      breakEven: breakEven
-    };
-  }, [recipes, selectedRecipeId, customPrices, markup, fixedAddition]);
-
-  // Handhabung des dreistelligen, validierten Aufschlag-Inputs
-  const handleMarkupChange = (e) => {
-    let val = parseInt(e.target.value.replace(/\D/g, ''), 10);
-    if (isNaN(val)) val = '';
-    else if (val < 1) val = 1;
-    else if (val > 999) val = 999;
-    setMarkup(val);
-  };
-
-  // NEU: Automatische 2-Kommastellen Formatierung für den Fix-Betrag
-  const handleFixedBlur = () => {
-    const val = parseFloat(fixedAddition);
-    if (!isNaN(val)) {
-      setFixedAddition(val.toFixed(2));
-    } else {
-      setFixedAddition('');
+      return { cost: factor * basePrice, label: ing.name, basePrice, isCustom, isRecipe: false };
     }
   };
 
+  const selectedRecipe = recipes.find(r => r.id === selectedRecipeId);
+
+  // Live-Berechnung bei jedem Render (kein Button mehr nötig)
+  const calculationData = useMemo(() => {
+    if (!selectedRecipe) return null;
+    let totalMaterialCost = 0;
+    const details = selectedRecipe.ingredients.map(ing => {
+      const result = calculateIngredientCost(ing);
+      totalMaterialCost += result.cost;
+      return { ...ing, ...result };
+    });
+    return { details, totalMaterialCost };
+  }, [selectedRecipe, customPrices, recipes]);
+
+  const pieceCost = selectedRecipe && calculationData ? (calculationData.totalMaterialCost / selectedRecipe.baseYield) : 0;
+  const suggestedPrice = (pieceCost * (markup / 100)) + parseFloat(fixedAddition || 0);
+  const breakEven = suggestedPrice > 0 ? Math.ceil(calculationData?.totalMaterialCost / suggestedPrice) : 0;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8 animate-in fade-in zoom-in-95 duration-300">
-      
-      {/* 1. Rezeptauswahl */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
         <h2 className="text-3xl font-black text-stone-800 mb-6 flex items-center">
-          <Calculator className="w-8 h-8 mr-3 text-orange-600" /> Preiskalkulation
+          <Activity className="w-8 h-8 mr-3 text-orange-600" /> Kalkulation & Preise
         </h2>
-        <select 
-          className="w-full px-5 py-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 outline-none text-lg font-bold text-stone-800 cursor-pointer transition-all"
-          value={selectedRecipeId}
-          onChange={(e) => setSelectedRecipeId(e.target.value)}
-        >
-          <option value="">-- Bitte Rezept wählen --</option>
-          {recipes.map(r => (
-            <option key={r.id} value={r.id}>{r.title} (Ertrag: {r.baseYield} {r.yieldUnit})</option>
-          ))}
-        </select>
+
+        <div>
+          <label className="block text-sm font-bold text-stone-600 mb-2">Rezept zur Live-Kalkulation auswählen</label>
+          <select 
+            className="w-full px-4 py-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none text-lg font-medium shadow-inner"
+            value={selectedRecipeId}
+            onChange={(e) => setSelectedRecipeId(e.target.value)}
+          >
+            <option value="">Bitte Rezept wählen...</option>
+            {recipes.map(r => (
+              <option key={r.id} value={r.id}>{r.title} (Ertrag: {r.baseYield} {r.yieldUnit})</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {calculationData && (
-        <>
-          {/* 2. Dashboards: Kosten, Verkauf & Break-Even */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {calculationData && selectedRecipe && (
+        <div className="animate-in slide-in-from-bottom-4 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
-            {/* Kosten */}
-            <div className="bg-stone-800 text-white p-6 md:p-8 rounded-[2rem] shadow-md flex flex-col justify-between">
+            <div className="bg-stone-800 text-white p-6 rounded-[2rem] shadow-sm flex flex-col justify-between">
               <div>
-                <span className="text-stone-400 font-bold uppercase tracking-widest text-xs mb-2 block flex items-center">
-                  <Coins className="w-4 h-4 mr-1.5" /> Materialkosten (Gesamt)
-                </span>
-                <div className="text-5xl font-black tracking-tight">{calculationData.totalCost.toFixed(2)} €</div>
-                <div className="mt-2 text-stone-300 font-medium">für {calculationData.recipe.baseYield} {calculationData.recipe.yieldUnit}</div>
+                <span className="text-stone-400 font-bold uppercase tracking-wider text-sm mb-2 block">Materialkosten (Gesamt)</span>
+                <div className="text-4xl font-black">{calculationData.totalMaterialCost.toFixed(2)} €</div>
+                <div className="mt-2 text-stone-300 font-medium">Gesamte Charge ({selectedRecipe.baseYield} {selectedRecipe.yieldUnit})</div>
               </div>
               <div className="mt-6 pt-4 border-t border-stone-700/50 flex justify-between items-center">
                 <span className="text-stone-400 font-medium">Reine Stückkosten:</span>
-                <span className="font-black text-2xl text-stone-200">{calculationData.pieceCost.toFixed(2)} €</span>
+                <span className="font-bold text-2xl text-orange-400">{pieceCost.toFixed(2)} €</span>
               </div>
             </div>
 
-            {/* Verkaufspreis & Marge (Neues Flex-Layout, keine Überschneidung) */}
-            <div className="bg-orange-600 text-white p-6 md:p-8 rounded-[2rem] shadow-xl shadow-orange-600/20 flex flex-col justify-between gap-6">
+            <div className="bg-orange-600 text-white p-6 rounded-[2rem] shadow-md relative overflow-hidden flex flex-col justify-between">
               <div>
-                <span className="text-orange-200 font-bold uppercase tracking-widest text-xs mb-2 block flex items-center">
-                  <Receipt className="w-4 h-4 mr-1.5" /> Empfohlener Verkaufspreis
-                </span>
-                <div className="text-5xl lg:text-6xl font-black tracking-tighter">{calculationData.suggestedPrice.toFixed(2)} €</div>
-                <div className="mt-2 text-orange-200 font-medium">pro {calculationData.recipe.yieldUnit.replace(/s$/i, '').replace(/e$/i, '')}</div>
+                <span className="text-orange-200 font-bold uppercase tracking-wider text-sm mb-2 block">Empfohlener Verkaufspreis</span>
+                <div className="text-5xl font-black">{suggestedPrice.toFixed(2)} €</div>
+                <div className="mt-2 text-orange-200 font-medium">pro {selectedRecipe.yieldUnit.replace(/s$/i, '').replace(/e$/i, '')}</div>
               </div>
               
-              {/* Parameter-Kontrollzentrum */}
-              <div className="bg-orange-700/40 p-4 rounded-3xl backdrop-blur-sm border border-orange-500/30 flex flex-row items-center justify-around gap-2 sm:gap-4 shrink-0">
-                
-                {/* Prozentualer Aufschlag */}
+              <div className="mt-6 bg-orange-700/40 p-4 rounded-3xl backdrop-blur-sm border border-orange-500/30 flex flex-row items-center justify-around gap-2 sm:gap-4 shrink-0">
                 <div className="flex flex-col items-center flex-1">
                   <label className="text-[10px] uppercase font-black text-orange-200 mb-1.5 tracking-wider text-center">Faktor (%)</label>
                   <div className="flex items-center justify-center bg-white/10 rounded-xl px-2 py-1.5 w-full">
-                    <input 
-                      type="number" 
-                      value={markup}
-                      onChange={handleMarkupChange}
-                      className="w-12 sm:w-16 bg-transparent text-white placeholder-white/50 focus:outline-none font-black text-center text-xl"
-                    />
+                    <input type="number" value={markup} onChange={handleMarkupChange} className="w-12 sm:w-16 bg-transparent text-white placeholder-white/50 focus:outline-none font-black text-center text-xl" />
                     <span className="text-orange-300 font-bold ml-1">%</span>
                   </div>
                 </div>
-
-                <div className="w-px h-10 bg-orange-500/40"></div> {/* Trennlinie */}
-
-                {/* Fixer Betrag in Euro */}
+                <div className="w-px h-10 bg-orange-500/40"></div>
                 <div className="flex flex-col items-center flex-1">
                   <label className="text-[10px] uppercase font-black text-orange-200 mb-1.5 tracking-wider text-center">Fix-Betrag</label>
                   <div className="flex items-center justify-center bg-white/10 rounded-xl px-2 py-1.5 w-full">
                     <span className="text-orange-300 font-bold mr-1">+</span>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      value={fixedAddition}
-                      onChange={(e) => setFixedAddition(e.target.value)}
-                      onBlur={handleFixedBlur}
-                      placeholder="0.00"
-                      className="w-16 sm:w-24 bg-transparent text-white placeholder-white/50 focus:outline-none font-black text-center text-xl"
-                    />
+                    <input type="number" step="0.01" value={fixedAddition} onChange={(e) => setFixedAddition(e.target.value)} onBlur={handleFixedBlur} placeholder="0.00" className="w-16 sm:w-24 bg-transparent text-white placeholder-white/50 focus:outline-none font-black text-center text-xl" />
                     <span className="text-orange-300 font-bold ml-1">€</span>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
 
-          {/* 3. Break-Even Karte */}
-          <div className="bg-emerald-50 border-2 border-emerald-200 p-6 rounded-[2rem] flex items-start gap-4">
-            <div className="bg-emerald-500 text-white p-3 rounded-2xl shrink-0">
-              <Target className="w-6 h-6" />
-            </div>
+          <div className="bg-white border-2 border-emerald-500 p-6 rounded-[2rem] shadow-sm flex items-center justify-between">
             <div>
-              <h3 className="font-black text-emerald-900 text-lg mb-1">Break-Even Gewinnschwelle</h3>
-              <p className="text-emerald-700 font-medium leading-relaxed">
-                Sobald du <strong className="font-black text-xl mx-1">{calculationData.breakEven}</strong> von deinen {calculationData.recipe.baseYield} {calculationData.recipe.yieldUnit} verkauft hast, hast du die Materialkosten ({calculationData.totalCost.toFixed(2)} €) wieder komplett eingenommen. 
-                <br/>Jeder weitere Verkauf ist dein <strong className="text-emerald-800">Material-Gewinn</strong>.
-              </p>
+              <h4 className="text-emerald-700 font-black text-lg mb-1">Break-Even-Point</h4>
+              <p className="text-emerald-600/80 font-medium text-sm">Ab dieser Verkaufsmenge hast du die kompletten Materialkosten wieder drin.</p>
+            </div>
+            <div className="text-right ml-4">
+              <span className="text-4xl font-black text-emerald-600">{breakEven}</span>
+              <span className="text-emerald-700 font-bold ml-2">Stück</span>
             </div>
           </div>
 
-          {/* 4. Zutaten-Liste mit Inline-Editor für Eigene Preise */}
           <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
-            <h3 className="text-xl font-black text-stone-800 mb-6 flex items-center">
-              <ListPlus className="w-6 h-6 mr-3 text-stone-400" /> Zutaten & Eigene Preise
+            <h3 className="text-xl font-bold text-stone-800 mb-4 flex items-center">
+              <ListPlus className="w-5 h-5 mr-2 text-stone-400" /> Einzelaufstellung & Eigene Preise
             </h3>
             
             <ul className="divide-y divide-stone-100">
-              {calculationData.ingredients.map((ing, idx) => (
-                <li key={idx} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 group">
+              {calculationData.details.map((ing, idx) => (
+                <li key={idx} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 group">
                   <div className="flex-1">
-                    <span className="font-black text-stone-800 text-lg">{ing.name}</span>
-                    <div className="text-stone-500 font-medium mt-1 flex items-center gap-2">
-                      <span className="bg-stone-100 px-2.5 py-1 rounded-lg text-sm">{ing.amount} {ing.unit}</span>
-                      <span>Basispreis: {ing.basePrice.toFixed(2)} €</span>
-                    </div>
+                    <span className="font-bold text-stone-800 flex items-center text-lg">
+                      {ing.isRecipe && <Layers className="w-4 h-4 mr-2 text-orange-500" />}
+                      {ing.label}
+                    </span>
+                    <span className="text-stone-500 font-medium text-sm">
+                      {ing.amount} {ing.unit} 
+                      <span className="mx-2">•</span> 
+                      Basis: {ing.basePrice.toFixed(2)} € / {ing.isRecipe ? 'Unit' : 'kg/L/Stk'}
+                    </span>
                   </div>
                   
-                  <div className="flex items-center space-x-4">
-                    {editingPrice === ing.name ? (
-                      <div className="flex items-center bg-stone-100 p-1.5 rounded-xl border border-stone-300 shadow-inner">
-                        <input 
-                          autoFocus
-                          type="number" 
-                          step="0.01"
-                          value={tempPrice}
-                          onChange={(e) => setTempPrice(e.target.value)}
-                          placeholder="€ Preis"
-                          className="w-20 px-3 py-2 rounded-lg border-none focus:ring-2 focus:ring-orange-500 font-bold text-center bg-white"
-                        />
-                        <button onClick={() => saveCustomPrice(ing.name, tempPrice)} className="ml-2 p-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors">
-                          <CheckCircle className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => setEditingPrice(null)} className="ml-1 p-2 text-stone-400 hover:text-stone-600 transition-colors">
-                          <X className="w-5 h-5" />
-                        </button>
+                  <div className="flex items-center space-x-3">
+                    {editingPrice === ing.name && !ing.isRecipe ? (
+                      <div className="flex items-center space-x-2 bg-stone-100 p-1.5 rounded-xl">
+                        <input autoFocus type="number" step="0.01" value={tempPrice} onChange={(e) => setTempPrice(e.target.value)} placeholder="Preis/kg" className="w-20 px-2 py-1.5 rounded-lg border-none focus:ring-2 focus:ring-orange-500 text-sm font-bold text-center" />
+                        <button onClick={() => saveCustomPrice(ing.name, tempPrice)} className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"><Check className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingPrice(null)} className="p-1.5 text-stone-400 hover:text-stone-600"><X className="w-4 h-4" /></button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-4">
-                        <button 
-                          onClick={() => { setTempPrice(ing.basePrice); setEditingPrice(ing.name); }}
-                          className={`px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
-                            ing.isCustom 
-                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200' 
-                              : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
-                          }`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5 inline mr-1.5" />
-                          {ing.isCustom ? 'Dein Preis' : 'Preis ändern'}
-                        </button>
+                      <>
+                        {!ing.isRecipe ? (
+                          <button 
+                            onClick={() => { setTempPrice(ing.basePrice); setEditingPrice(ing.name); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${ing.isCustom ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                          >
+                            <Edit2 className="w-3 h-3 inline mr-1" />{ing.isCustom ? 'Eigener Preis' : 'Preis ändern'}
+                          </button>
+                        ) : (
+                          <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-50 text-orange-700 border border-orange-100">
+                            Auto-Kalkuliert
+                          </span>
+                        )}
                         <div className="w-24 text-right">
-                          <span className="font-black text-xl text-stone-900">{ing.cost.toFixed(2)} €</span>
+                          <span className="font-black text-lg text-stone-900">{ing.cost.toFixed(2)} €</span>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 </li>
               ))}
             </ul>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
 
-// ==========================================
-// 8. HILFSKOMPONENTEN
-// ==========================================
-function NavItem({ icon, label, value, current, onClick }) {
-  const isActive = current === value;
+function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan, setWeeklyPlan }) {
+  const [activeSubTab, setActiveSubTab] = useState('plan'); // 'plan' oder 'log'
+  
+  // States für Wochenplan
+  const [planRecipeId, setPlanRecipeId] = useState('');
+  const [planAmount, setPlanAmount] = useState('');
+
+  // States für Logbuch
+  const [showAddLog, setShowAddLog] = useState(false);
+  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0,10));
+  const [logProductText, setLogProductText] = useState(''); // NEU: Freitext statt Rezept-ID
+  const [logSold, setLogSold] = useState('');
+  const [logReturn, setLogReturn] = useState('');
+  const [logTags, setLogTags] = useState([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+
+  const AVAILABLE_TAGS = ['☀️ Sonne', '🌧️ Regen', '❄️ Schnee', '🌡️ Hitze', '🎒 Ferien', '🎊 Feiertag', '🎪 Event'];
+
+  const handleAddPlan = () => {
+    if (!planRecipeId || !planAmount) return;
+    const newItem = { id: Date.now().toString(), recipeId: planRecipeId, amount: parseFloat(planAmount) };
+    setWeeklyPlan([...weeklyPlan, newItem]);
+    setPlanRecipeId('');
+    setPlanAmount('');
+  };
+
+  const removePlanItem = (id) => {
+    setWeeklyPlan(weeklyPlan.filter(item => item.id !== id));
+  };
+
+  const getUnitFactor = (unit, amount) => {
+    const u = (unit || '').toLowerCase();
+    const amt = parseFloat(amount) || 0;
+    if (u === 'g' || u === 'ml') return amt / 1000;
+    if (u === 'el') return amt * 0.015;
+    if (u === 'tl') return amt * 0.005;
+    return amt;
+  };
+
+  // Magische, rekursive Einkaufsliste
+  const shoppingList = useMemo(() => {
+    const totals = {};
+    
+    weeklyPlan.forEach(planItem => {
+      const recipe = recipes.find(r => r.id === planItem.recipeId);
+      if (!recipe) return;
+
+      const baseScale = planItem.amount / recipe.baseYield;
+
+      const resolveIngredients = (recId, currentScale) => {
+        const rec = recipes.find(r => r.id === recId);
+        if (!rec) return;
+
+        rec.ingredients.forEach(ing => {
+          if (ing.type === 'recipe') {
+            const subRec = recipes.find(r => r.id === ing.refId);
+            if (subRec) {
+              const subYieldInKg = getUnitFactor(subRec.yieldUnit, subRec.baseYield) || 1;
+              const usageInKg = getUnitFactor(ing.unit, ing.amount) * currentScale;
+              if (subYieldInKg > 0) resolveIngredients(ing.refId, usageInKg / subYieldInKg);
+            }
+          } else {
+            const kgAmount = getUnitFactor(ing.unit, ing.amount) * currentScale;
+            const name = (ing.name || '').trim();
+            if (name) {
+              if (!totals[name]) totals[name] = 0;
+              totals[name] += kgAmount;
+            }
+          }
+        });
+      };
+      resolveIngredients(planItem.recipeId, baseScale);
+    });
+    
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  }, [weeklyPlan, recipes]);
+
+  const handleSaveLog = () => {
+    if (!logProductText || !logSold) return;
+    const log = { 
+      id: Date.now().toString(), 
+      date: logDate, 
+      productText: logProductText, // NEU: Speichert Freitext
+      tags: logTags,
+      sold: parseFloat(logSold), 
+      leftover: parseFloat(logReturn || 0),
+      produced: parseFloat(logSold) + parseFloat(logReturn || 0)
+    };
+    setProductionLogs([log, ...productionLogs]);
+    setShowAddLog(false);
+    setLogProductText('');
+    setLogSold('');
+    setLogReturn('');
+    setLogTags([]);
+    setCustomTagInput('');
+  };
+
+  const toggleTag = (tag) => {
+    setLogTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
+  const handleAddCustomTag = (e) => {
+    e.preventDefault();
+    const tag = customTagInput.trim();
+    if (tag && !logTags.includes(tag)) {
+      setLogTags([...logTags, tag]);
+    }
+    setCustomTagInput('');
+  };
+
   return (
-    <button onClick={() => onClick(value)} className={`w-full flex items-center space-x-3 px-5 py-4 rounded-2xl transition-all duration-200 ${isActive ? 'bg-orange-100 text-orange-700 font-bold shadow-inner' : 'text-stone-600 hover:bg-stone-100 font-semibold'}`}>
-      {React.cloneElement(icon, { className: `w-6 h-6 ${isActive ? 'text-orange-600' : 'text-stone-500'}` })}
-      <span className="text-lg">{label}</span>
-    </button>
+    <div className="max-w-4xl mx-auto space-y-6 pb-8 animate-in fade-in zoom-in-95 duration-300">
+      <div className="flex justify-between items-end mb-6">
+        <div>
+          <h2 className="text-3xl font-black text-stone-800 tracking-tight">Produktion</h2>
+          <p className="text-stone-500 font-medium">Planung, Einkauf & Logbuch</p>
+        </div>
+      </div>
+
+      <div className="flex bg-stone-200 p-1 rounded-2xl mb-8">
+        <button onClick={() => setActiveSubTab('plan')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeSubTab === 'plan' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'}`}>Wochenplan & Einkauf</button>
+        <button onClick={() => setActiveSubTab('log')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${activeSubTab === 'log' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'}`}>Tages-Logbuch</button>
+      </div>
+
+      {activeSubTab === 'plan' && (
+        <div className="space-y-6 animate-in fade-in">
+          <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
+            <h3 className="text-xl font-bold text-stone-800 mb-6 flex items-center"><Activity className="w-5 h-5 mr-2 text-orange-600" /> Wochenmenge festlegen</h3>
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Rezept</label>
+                <select value={planRecipeId} onChange={e => setPlanRecipeId(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-800">
+                  <option value="">Bitte wählen...</option>
+                  {recipes.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                </select>
+              </div>
+              <div className="w-full md:w-32">
+                <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Menge</label>
+                <input type="number" value={planAmount} onChange={e => setPlanAmount(e.target.value)} placeholder="z.B. 150" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black text-lg" />
+              </div>
+              <button onClick={handleAddPlan} disabled={!planRecipeId || !planAmount} className="w-full md:w-auto bg-stone-800 disabled:bg-stone-300 text-white px-6 py-3 rounded-xl font-bold hover:bg-stone-900 transition-colors h-[50px]">Hinzufügen</button>
+            </div>
+
+            {weeklyPlan.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-stone-100">
+                <h4 className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-4">Aktueller Produktionsplan</h4>
+                <ul className="space-y-3">
+                  {weeklyPlan.map(item => {
+                    const rec = recipes.find(r => r.id === item.recipeId);
+                    if (!rec) return null;
+                    return (
+                      <li key={item.id} className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
+                        <span className="font-bold text-stone-800">{rec.title}</span>
+                        <div className="flex items-center gap-4">
+                          <span className="font-black text-orange-600 bg-orange-100 px-3 py-1 rounded-lg">{item.amount} <span className="text-sm text-orange-800/60 font-medium">{rec.yieldUnit}</span></span>
+                          <button onClick={() => removePlanItem(item.id)} className="text-stone-300 hover:text-red-500"><X className="w-5 h-5" /></button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {weeklyPlan.length > 0 && (
+            <div className="bg-orange-600 p-6 md:p-8 rounded-[2rem] shadow-md text-white">
+              <h3 className="text-2xl font-black mb-2 flex items-center"><ListPlus className="w-6 h-6 mr-3 text-orange-200" /> Benötigter Materialbedarf</h3>
+              <p className="text-orange-200 font-medium mb-6">Exakt berechnet aus deinem Wochenplan (inkl. aller Vorstufen)</p>
+              <div className="bg-white rounded-[1.5rem] p-2 md:p-6 shadow-inner text-stone-800">
+                <ul className="divide-y divide-stone-100">
+                  {shoppingList.map(([name, amount]) => {
+                    const isSmall = amount < 1;
+                    const displayAmount = isSmall ? Math.round(amount * 1000) : amount.toFixed(2);
+                    const displayUnit = isSmall ? 'g / ml' : 'kg / L / Stk';
+                    return (
+                      <li key={name} className="py-3 px-4 flex justify-between items-center hover:bg-stone-50 rounded-xl transition-colors">
+                        <span className="font-bold text-lg">{name}</span>
+                        <span className="font-black text-orange-600 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-lg shadow-sm">{displayAmount} <span className="text-sm text-orange-800/60 ml-1">{displayUnit}</span></span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSubTab === 'log' && (
+        <div className="space-y-6 animate-in fade-in">
+          <button onClick={() => setShowAddLog(!showAddLog)} className="w-full bg-white border-2 border-dashed border-stone-300 hover:border-orange-400 hover:bg-orange-50 text-stone-500 hover:text-orange-600 font-bold py-6 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-2">
+            {showAddLog ? <X className="w-8 h-8" /> : <Plus className="w-8 h-8" />}
+            <span>{showAddLog ? 'Abbrechen' : 'Neuen Tag / Produkt erfassen'}</span>
+          </button>
+
+          {showAddLog && (
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200 animate-in slide-in-from-top-4">
+              <h3 className="text-xl font-bold text-stone-800 mb-6">Logbuch-Eintrag</h3>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Datum</label>
+                    <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Produkt(e) / Notizen</label>
+                    <textarea 
+                      value={logProductText} 
+                      onChange={e => setLogProductText(e.target.value)} 
+                      placeholder="Freitext für Tagesproduktion...&#10;z.B. Bauernbrot&#10;Sondertorte Hochzeit" 
+                      rows={3}
+                      className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-800 resize-y" 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Besondere Bedingungen (Wetter, Event...)</label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {AVAILABLE_TAGS.map(tag => (
+                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 ${logTags.includes(tag) ? 'bg-orange-100 border-orange-300 text-orange-800 shadow-sm' : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}>
+                        {tag}
+                      </button>
+                    ))}
+                    {/* Eigene Tags anzeigen */}
+                    {logTags.filter(t => !AVAILABLE_TAGS.includes(t)).map(tag => (
+                      <button key={tag} onClick={() => toggleTag(tag)} className="px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 bg-orange-100 border-orange-300 text-orange-800 shadow-sm">
+                        {tag} <X className="w-3 h-3 inline ml-1" />
+                      </button>
+                    ))}
+                  </div>
+                  {/* Eingabefeld für eigene Bedingungen */}
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={customTagInput} 
+                      onChange={e => setCustomTagInput(e.target.value)} 
+                      onKeyDown={e => { if(e.key === 'Enter') handleAddCustomTag(e); }}
+                      placeholder="Eigene Bedingung tippen..." 
+                      className="flex-1 bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm" 
+                    />
+                    <button onClick={handleAddCustomTag} className="bg-stone-200 hover:bg-stone-300 text-stone-700 px-4 py-3 rounded-xl font-bold transition-colors text-sm">
+                      Hinzufügen
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Verkaufte Menge</label>
+                    <input type="number" value={logSold} onChange={e => setLogSold(e.target.value)} placeholder="0" className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-4 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none font-black text-2xl text-center" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Davon Retoure</label>
+                    <input type="number" value={logReturn} onChange={e => setLogReturn(e.target.value)} placeholder="0" className="w-full bg-red-50 border border-red-200 text-red-900 px-4 py-4 rounded-2xl focus:ring-2 focus:ring-red-500 outline-none font-black text-2xl text-center" />
+                  </div>
+                </div>
+                <button onClick={handleSaveLog} disabled={!logProductText || !logSold} className="w-full bg-stone-800 disabled:bg-stone-300 text-white px-6 py-4 rounded-2xl font-bold hover:bg-stone-900 text-lg shadow-md transition-all">Eintrag speichern</button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {productionLogs.map(log => {
+              // Abwärtskompatibilität für alte Einträge, die noch eine recipeId haben
+              let productName = log.productText;
+              if (!productName && log.recipeId) {
+                const rec = recipes.find(r => r.id === log.recipeId);
+                productName = rec ? rec.title : 'Unbekanntes Produkt';
+              }
+              
+              const totalProduced = log.produced || (parseFloat(log.sold) + parseFloat(log.leftover));
+              const soldAmount = log.sold !== undefined ? log.sold : (log.produced - log.leftover);
+              const quote = totalProduced > 0 ? Math.round((soldAmount / totalProduced) * 100) : 0;
+
+              return (
+                <div key={log.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="font-black text-xl text-stone-800">{new Date(log.date).toLocaleDateString('de-DE')}</span>
+                      {log.tags && log.tags.map(t => (
+                        <span key={t} className="bg-stone-100 text-stone-700 border border-stone-200 px-2 py-1 rounded-md text-xs font-bold">{t}</span>
+                      ))}
+                    </div>
+                    {/* whitespace-pre-wrap sorgt dafür, dass Zeilenumbrüche vom Textfeld hier korrekt angezeigt werden! */}
+                    <h4 className="text-lg font-bold text-stone-700 mb-2 whitespace-pre-wrap">{productName}</h4>
+                    <div className="flex gap-4 text-sm font-medium">
+                      <span className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100">Verkauft: <strong className="font-black text-emerald-900 text-base ml-1">{soldAmount}</strong></span>
+                      <span className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg border border-red-100">Retoure: <strong className="font-black text-red-900 text-base ml-1">{log.leftover}</strong></span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-stone-100 pt-4 md:pt-0 md:pl-6">
+                    <div className="text-right">
+                      <span className="block text-[10px] font-black text-stone-400 uppercase tracking-wider mb-1">Verkaufsquote</span>
+                      <span className={`font-black text-3xl ${quote > 85 ? 'text-emerald-500' : quote > 60 ? 'text-orange-500' : 'text-red-500'}`}>{quote}%</span>
+                    </div>
+                    <button 
+                      onClick={() => setProductionLogs(productionLogs.filter(l => l.id !== log.id))} 
+                      className="p-3 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                      title="Eintrag löschen"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function MobileNavItem({ icon, label, value, current, onClick }) {
-  const isActive = current === value;
+function SettingsView({ user, onLogout, data, setData }) {
+  const [importStatus, setImportStatus] = useState(null);
+
+  const handleExport = () => {
+    const exportData = {
+      inventory: data.inventory,
+      recipes: data.recipes,
+      customPrices: data.customPrices,
+      productionLogs: data.productionLogs,
+      weeklyPlan: data.weeklyPlan,
+      exportDate: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ulti-back-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target.result);
+        
+        if (imported.inventory && Array.isArray(imported.inventory)) setData.setInventory(imported.inventory);
+        if (imported.recipes && Array.isArray(imported.recipes)) setData.setRecipes(imported.recipes);
+        if (imported.customPrices) setData.setCustomPrices(imported.customPrices);
+        if (imported.productionLogs && Array.isArray(imported.productionLogs)) setData.setProductionLogs(imported.productionLogs);
+        if (imported.weeklyPlan && Array.isArray(imported.weeklyPlan)) setData.setWeeklyPlan(imported.weeklyPlan);
+
+        setImportStatus({ type: 'success', msg: 'Daten erfolgreich wiederhergestellt!' });
+      } catch (error) {
+        console.error("Import Fehler:", error);
+        setImportStatus({ type: 'error', msg: 'Fehlerhaftes Dateiformat. Import abgebrochen.' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   return (
-    <button onClick={() => onClick(value)} className={`flex flex-col items-center justify-center w-full py-2.5 transition-colors ${isActive ? 'text-orange-600' : 'text-stone-400'}`}>
-      {React.cloneElement(icon, { className: `w-7 h-7 mb-1.5 ${isActive ? 'stroke-2' : 'stroke-[1.5]'}` })}
-      <span className={`text-[11px] uppercase tracking-wider ${isActive ? 'font-black' : 'font-bold'}`}>{label}</span>
-    </button>
+    <div className="max-w-2xl mx-auto space-y-6 pb-8 animate-in fade-in zoom-in-95 duration-300">
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
+        <h2 className="text-3xl font-black text-stone-800 mb-6 flex items-center">
+          <Settings className="w-8 h-8 mr-3 text-stone-600" /> Einstellungen
+        </h2>
+
+        <div className="space-y-8">
+          <div className="bg-stone-50 p-6 rounded-2xl border border-stone-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-1">Angemeldet als</p>
+              <p className="font-black text-xl text-stone-800">{user.email}</p>
+            </div>
+            <button onClick={onLogout} className="px-4 py-2 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl hover:bg-stone-100 transition-colors">
+              Abmelden
+            </button>
+          </div>
+
+          <div className="pt-6 border-t border-stone-100">
+            <h3 className="text-lg font-black text-stone-800 mb-4">Lokale Daten \& Backup</h3>
+            
+            {importStatus && (
+              <div className={`p-4 rounded-xl mb-4 font-bold ${importStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                {importStatus.msg}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button onClick={handleExport} className="flex flex-col items-center justify-center p-6 bg-stone-800 text-white rounded-2xl hover:bg-stone-900 transition-colors group">
+                <Box className="w-8 h-8 mb-3 text-stone-400 group-hover:text-white transition-colors" />
+                <span className="font-bold text-lg">Backup speichern</span>
+                <span className="text-xs text-stone-400 mt-1">.json Datei herunterladen</span>
+              </button>
+
+              <label className="flex flex-col items-center justify-center p-6 bg-white border-2 border-dashed border-stone-300 text-stone-600 rounded-2xl hover:border-orange-400 hover:bg-orange-50 cursor-pointer transition-colors group">
+                <RefreshCw className="w-8 h-8 mb-3 text-stone-400 group-hover:text-orange-500 transition-colors" />
+                <span className="font-bold text-lg">Backup laden</span>
+                <span className="text-xs text-stone-400 mt-1">Daten überschreiben</span>
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
+            </div>
+          </div>
+          
+          <div className="text-center pt-8">
+            <p className="text-stone-400 font-bold text-sm">Schwind.cc Ulti-Back v1.0.0 (Release Candidate)</p>
+            <p className="text-stone-300 text-xs mt-1">Alle Daten werden sicher lokal im Browser gespeichert.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   );
 }
