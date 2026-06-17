@@ -482,9 +482,9 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     if (!file) return;
 
     
-    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo";
+    const apiKey = "AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ";
 
-    if (!apiKey || !apiKey.startsWith("AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo")) {
+    if (!apiKey || !apiKey.startsWith("AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
       e.target.value = '';
       return;
