@@ -495,7 +495,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     // Ohne diesen Key kann die KI-Funktion nicht mit den Google-Servern kommunizieren.
     const apiKey = "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME"; 
 
-    if (!apiKey || apiKey.trim() === "") {
+    if (!apiKey || apiKey.trim() === "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME") {
       setAnalyzeError("⚠️ API-Key fehlt! Bitte trage deinen kostenlosen Gemini API-Key im Quellcode der App ein.");
       setIsAnalyzing(false);
       e.target.value = '';
