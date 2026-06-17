@@ -43,7 +43,7 @@ class ErrorBoundary extends React.Component {
         <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
           <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
           <h1 className="text-2xl font-black text-stone-800 mb-2">Hoppla! Ein Fehler ist aufgetreten.</h1>
-          <p className="text-stone-500 mb-6 max-w-md">Die App hat einen unerwarteten Zustand erreicht. Keine Sorge, deine Daten sind sicher lokal gespeichert.</p>
+          <p className="text-stone-500 mb-6 max-w-md">Die App hat einen unerwarteten Zustand erreicht.</p>
           <button 
             onClick={() => window.location.reload()} 
             className="bg-stone-800 text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg active:scale-95 transition-all"
@@ -145,24 +145,39 @@ function App() {
       </aside>
 
       <main className="flex-1 p-4 md:p-8 md:max-w-6xl w-full mx-auto">
-        {/* ... Rest der App Views ... */}
         {activeTab === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} />}
         {activeTab === 'recipes' && <RecipeView recipes={recipes} setRecipes={setRecipes} />}
         {activeTab === 'kalkulation' && <CalculationView customPrices={customPrices} setCustomPrices={setCustomPrices} recipes={recipes} />}
         {activeTab === 'production' && <ProductionView productionLogs={productionLogs} setProductionLogs={setProductionLogs} recipes={recipes} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
         {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{inventory, recipes, customPrices, productionLogs, weeklyPlan}} setData={{setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan}} />}
       </main>
-
-      <nav className="md:hidden fixed bottom-0 w-full bg-stone-100/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50">
-        <div className="flex justify-around items-center p-2">
-          <MobileNavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-          <MobileNavButton icon={ListPlus} label="Rezepte" active={activeTab === 'recipes'} onClick={() => setActiveTab('recipes')} />
-          <MobileNavButton icon={Activity} label="Preise" active={activeTab === 'kalkulation'} onClick={() => setActiveTab('kalkulation')} />
-          <MobileNavButton icon={Layers} label="Produktion" active={activeTab === 'production'} onClick={() => setActiveTab('production')} />
-          <MobileNavButton icon={Settings} label="Setup" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-        </div>
-      </nav>
     </div>
+  );
+}
+
+function NavButton({ icon: Icon, label, active, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center px-4 py-3 rounded-2xl font-bold transition-all ${active ? 'bg-orange-50 text-orange-600' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'}`}
+    >
+      <Icon className={`w-5 h-5 mr-3 ${active ? 'text-orange-600' : 'text-stone-400'}`} />
+      {label}
+    </button>
+  );
+}
+
+function MobileNavButton({ icon: Icon, label, active, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex flex-col items-center p-2 min-w-[64px] rounded-xl transition-all ${active ? 'text-orange-600' : 'text-stone-400'}`}
+    >
+      <div className={`p-1.5 rounded-full mb-1 transition-colors ${active ? 'bg-orange-100' : 'bg-transparent'}`}>
+        <Icon className="w-6 h-6" />
+      </div>
+      <span className="text-[10px] font-bold">{label}</span>
+    </button>
   );
 }
 
@@ -171,17 +186,16 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState('');
 
-  const updateField = (field, value) => setEdited({...edited, [field]: value});
-  
-  // WICHTIG: Hier deinen AIzaSy-Key aus dem Google AI Studio einfügen
-  const apiKey = "HIER_AIzaSy_KEY_EINFUEGEN"; 
+  // HIER DEINEN API KEY EINTRAGEN (muss mit AIzaSy beginnen)
+  const apiKey = "DEIN_AIzaSy_KEY_HIER_EINTRAGEN";
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!apiKey.startsWith("AIza")) {
-      setAnalyzeError("Bitte trage einen gültigen AIza... Key in den Code ein.");
+    if (!apiKey || !apiKey.startsWith("AIzaSy")) {
+      setAnalyzeError("Fehler: Bitte einen gültigen AIzaSy-API-Key in Zeile 455 eintragen.");
+      e.target.value = '';
       return;
     }
 
@@ -194,8 +208,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
       reader.onload = async () => {
         try {
           const base64Data = reader.result.split(',')[1];
-          let mimeType = file.type || 'application/pdf';
-
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
             {
@@ -204,8 +216,8 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
               body: JSON.stringify({
                 contents: [{ 
                   parts: [
-                    { text: 'Analysiere das beigefügte Rezept. Gebe exakt und ausschließlich valides JSON zurück. Format: {"title": "String", "baseYield": Number, "yieldUnit": "String", "ingredients": [{"name": "String", "amount": Number, "unit": "String"}]}' }, 
-                    { inlineData: { mimeType: mimeType, data: base64Data } }
+                    { text: 'Analysiere dieses Rezept. Gebe JSON zurück: {"title": "String", "baseYield": Number, "ingredients": [{"name": "String", "amount": Number, "unit": "String"}]}' }, 
+                    { inlineData: { mimeType: file.type, data: base64Data } }
                   ] 
                 }]
               })
@@ -213,27 +225,23 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           );
 
           if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(`API Fehler (${response.status}): ${errData.error?.message || 'Unbekannt'}`);
+             const err = await response.json();
+             throw new Error(err.error?.message || "API Fehler");
           }
 
           const result = await response.json();
-          const jsonText = result.candidates[0].content.parts[0].text;
-          const data = JSON.parse(jsonText.replace(/```json/gi, '').replace(/```/g, '').trim());
-
+          const data = JSON.parse(result.candidates[0].content.parts[0].text.replace(/```json/gi, '').replace(/```/g, ''));
+          
           setEdited(prev => ({
             ...prev,
             title: data.title || prev.title,
-            baseYield: data.baseYield || prev.baseYield,
             ingredients: [...prev.ingredients, ...(data.ingredients || []).map(i => ({...i, type: 'ingredient'}))]
           }));
 
         } catch (error) {
-          console.error(error);
           setAnalyzeError(error.message);
         } finally {
           setIsAnalyzing(false);
-          e.target.value = '';
         }
       };
     } catch (err) {
@@ -242,10 +250,23 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     }
   };
 
+  // ... (Hier der Rest der Editor-Komponente)
   return (
-      /* ... Rest der Editor UI bleibt identisch ... */
-      <div className="p-8">... Editor UI ...</div>
+    <div className="p-8 bg-white rounded-3xl border border-stone-200">
+        <h2 className="text-xl font-bold mb-4">Editor</h2>
+        {/* Hier den Rest der Editor UI einfügen... */}
+        <button onClick={() => onSave(edited)} className="mt-4 bg-orange-600 text-white px-6 py-2 rounded-xl font-bold">Speichern</button>
+    </div>
   );
 }
 
-// [Hier den Rest deiner Komponenten InventoryView, CalculationView, ProductionView, SettingsView, NavButton etc. unverändert einfügen]
+// Hier die übrigen View-Komponenten (InventoryView, etc.)
+// Wichtig: Am Ende der Datei steht der Export!
+
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
