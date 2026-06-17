@@ -491,9 +491,9 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     setIsAnalyzing(true);
     setAnalyzeError('');
 
-    const apiKey = "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME"; 
+    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo"; 
 
-    if (!apiKey || apiKey.trim() === "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME") {
+    if (!apiKey || apiKey.trim() === "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo") {
       setAnalyzeError("Fehler: API-Key.");
       setIsAnalyzing(false);
       e.target.value = '';
