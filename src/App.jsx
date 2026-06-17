@@ -501,7 +501,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           const base64Data = reader.result.split(',')[1];
           let mimeType = file.type || 'application/pdf';
 
-          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
           const response = await fetch(apiUrl, {
             method: 'POST',
