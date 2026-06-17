@@ -61,14 +61,12 @@ function App() {
   const [user, setUser] = useLocalDB('ulti_back_user', null);
   const [activeTab, setActiveTab] = useState('inventory');
   
-  // Zentrale Daten-States
   const [inventory, setInventory] = useLocalDB('ulti_back_inventory', []);
   const [recipes, setRecipes] = useLocalDB('ulti_back_recipes', []);
   const [customPrices, setCustomPrices] = useLocalDB('ulti_back_customPrices', {});
   const [productionLogs, setProductionLogs] = useLocalDB('ulti_back_production', []);
   const [weeklyPlan, setWeeklyPlan] = useLocalDB('ulti_back_weekly_plan', []);
 
-  // Login State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginCode, setLoginCode] = useState('');
@@ -131,7 +129,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-100 font-sans pb-24 md:pb-0 md:pl-64 flex flex-col">
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 fixed left-0 top-0 h-screen bg-white border-r border-stone-200 z-50">
         <div className="p-8">
           <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Daniels<br/><span className="text-orange-600">Ulti-Back</span></h1>
@@ -147,9 +144,7 @@ function App() {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 md:max-w-6xl w-full mx-auto">
-        {/* Mobile Header */}
         <div className="md:hidden flex justify-between items-center mb-6 px-2">
           <h1 className="text-2xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
           <div className="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full border border-orange-200">v1.0.0</div>
@@ -162,7 +157,6 @@ function App() {
         {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{inventory, recipes, customPrices, productionLogs, weeklyPlan}} setData={{setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan}} />}
       </main>
 
-      {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 w-full bg-stone-100/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50">
         <div className="flex justify-around items-center p-2">
           <MobileNavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
@@ -277,7 +271,6 @@ function InventoryView({ inventory, setInventory }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {inventory.map(item => (
           <div key={item.id} className="bg-white rounded-[2rem] p-2 flex items-center justify-between shadow-sm border border-stone-200 relative overflow-hidden group">
-            {/* Abzieh-Fläche (Riesig) */}
             <button 
               onClick={() => updateStock(item.id, -item.step)}
               className="flex-1 flex flex-col justify-center px-6 py-6 hover:bg-red-50 rounded-2xl transition-colors text-left"
@@ -488,19 +481,17 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    setIsAnalyzing(true);
-    setAnalyzeError('');
+    
+    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXoN";
 
-    // --- GARANTIERT FUNKTIONIERENDER TEST-KEY ---
-    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo"; //  
- 
-
-    if (!apiKey || apiKey.length < 20) {
+    if (!apiKey || !apiKey.startsWith("AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
-      setIsAnalyzing(false);
       e.target.value = '';
       return;
     }
+
+    setIsAnalyzing(true);
+    setAnalyzeError('');
 
     try {
       const reader = new FileReader();
@@ -508,103 +499,54 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
       reader.onload = async () => {
         try {
           const base64Data = reader.result.split(',')[1];
-          let mimeType = file.type; 
-          
-          if (!mimeType && file.name.toLowerCase().endsWith('.pdf')) {
-            mimeType = 'application/pdf';
-          }
-
-          const payload = {
-            contents: [
-              {
-                role: "user",
-                parts: [
-                  { text: "Du bist ein Bäcker-Assistent. Analysiere dieses Rezept. Gebe exakt und ausschließlich valides JSON zurück. Keine Erklärung. JSON Format: {\"title\": \"Name\", \"baseYield\": Zahl, \"yieldUnit\": \"Einheit\", \"instructions\": \"Text\", \"bakeTemp\": \"Temp\", \"bakeTime\": \"Zeit\", \"ingredients\": [{\"name\": \"Zutat\", \"amount\": Zahl, \"unit\": \"g/kg/ml/Stk\"}]}" },
-                  {
-                    inlineData: {
-                      mimeType: mimeType,
-                      data: base64Data
-                    }
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-            }
-          };
+          let mimeType = file.type || 'application/pdf';
 
           const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-          const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ 
-        parts: [
-          { text: "Analysiere dieses Dokument und extrahiere die Zutaten und Mengenangaben." }, 
-          { inlineData: { mimeType: "application/pdf", data: base64Data } }
-        ] 
-      }]
-    })
-  }
-);
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ 
+                parts: [
+                  { text: 'Analysiere das beigefügte Rezept. Gebe exakt und ausschließlich valides JSON zurück. Keine Erklärungen. Format: {"title": "String", "baseYield": Number, "yieldUnit": "String", "instructions": "String", "bakeTemp": "String", "bakeTime": "String", "ingredients": [{"name": "String", "amount": Number, "unit": "String"}]}' }, 
+                  { inlineData: { mimeType: mimeType, data: base64Data } }
+                ] 
+              }],
+              generationConfig: { responseMimeType: "application/json" }
+            })
           });
 
           if (!response.ok) {
-            const errText = await response.text();
-            console.error("API Fehler-Details:", errText);
-            throw new Error("Fehler beim Senden an Google. Bitte prüfe deinen API-Key.");
+            const errData = await response.json();
+            throw new Error(`API Fehler (${response.status}): ${errData.error?.message || 'Unbekannt'}`);
           }
 
           const result = await response.json();
-          if (result.candidates && result.candidates.length > 0) {
-            let jsonText = result.candidates[0].content.parts[0].text;
-            
-            // Erweiterte Sicherheits-Reinigung für fehlerhafte KI Antworten
-            jsonText = jsonText.replace(/```json/gi, '').replace(/```/g, '').trim();
-            
-            let data;
-            try {
-              data = JSON.parse(jsonText);
-            } catch (parseErr) {
-              console.error("Ungültiges JSON von der KI erhalten:", jsonText);
-              throw new Error("Die KI hat die Daten nicht als gültiges Format zurückgegeben.");
-            }
+          const jsonText = result.candidates[0].content.parts[0].text;
+          const data = JSON.parse(jsonText.replace(/```json/gi, '').replace(/```/g, '').trim());
 
-            const newIngredients = (data.ingredients || []).map(ing => ({
-              type: 'ingredient',
-              name: ing.name || 'Unbekannte Zutat',
-              amount: parseFloat(ing.amount) || 0,
-              unit: ing.unit || 'g'
-            }));
+          setEdited(prev => ({
+            ...prev,
+            title: data.title || prev.title,
+            baseYield: data.baseYield || prev.baseYield,
+            yieldUnit: data.yieldUnit || prev.yieldUnit,
+            instructions: data.instructions || prev.instructions,
+            bakeTemp: data.bakeTemp || prev.bakeTemp,
+            bakeTime: data.bakeTime || prev.bakeTime,
+            ingredients: [...prev.ingredients, ...data.ingredients.map(i => ({...i, type: 'ingredient'}))]
+          }));
 
-            setEdited(prev => ({
-              ...prev,
-              title: data.title && prev.title === 'Neues Rezept' ? data.title : prev.title,
-              baseYield: parseFloat(data.baseYield) || prev.baseYield,
-              yieldUnit: data.yieldUnit || prev.yieldUnit,
-              instructions: data.instructions || prev.instructions,
-              bakeTemp: data.bakeTemp || prev.bakeTemp,
-              bakeTime: data.bakeTime || prev.bakeTime,
-              ingredients: [...prev.ingredients, ...newIngredients]
-            }));
-          } else {
-            setAnalyzeError("Die Datei konnte nicht gelesen werden.");
-          }
         } catch (error) {
-          console.error("Verarbeitungsfehler:", error);
-          setAnalyzeError(error.message || "Verarbeitungsfehler beim Auslesen der Datei.");
+          console.error(error);
+          setAnalyzeError(error.message);
         } finally {
           setIsAnalyzing(false);
           e.target.value = '';
         }
       };
     } catch (err) {
-      console.error("Dateifehler:", err);
-      setAnalyzeError("Lokaler Dateifehler beim Einlesen.");
+      setAnalyzeError("Dateifehler.");
       setIsAnalyzing(false);
     }
   };
@@ -619,14 +561,12 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
       </div>
 
       <div className="space-y-6">
-        
-        {/* KI Scan Bereich */}
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex-1">
             <h4 className="font-bold text-orange-900 flex items-center">
               <Activity className="w-5 h-5 mr-2" /> PDF oder Foto importieren
             </h4>
-            <p className="text-sm text-orange-800/70 mt-1">Lade ein Rezept hoch. Unsere KI liest Text und Zahlen aus und trägt sie automatisch unten ein.</p>
+            <p className="text-sm text-orange-800/70 mt-1">Lade ein Rezept hoch. Unsere KI liest es für dich aus.</p>
           </div>
           
           <div className="w-full md:w-auto">
