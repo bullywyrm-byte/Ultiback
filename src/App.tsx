@@ -491,12 +491,11 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     setIsAnalyzing(true);
     setAnalyzeError('');
 
-    // 🔴 WICHTIG: Wenn du die App exportierst, trage hier deinen echten Google Gemini API-Key ein.
-    // Ohne diesen Key kann die KI-Funktion nicht mit den Google-Servern kommunizieren.
-    const apiKey = "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME"; 
+  
+    const apiKey = "AQ.Ab8RN6KG8QUfs-FMwk8N9QSlhOAaYnxaz3mc2F-9w6YG-GbwWA"; 
 
-    if (!apiKey || apiKey.trim() === "AIzaSyDve4SUXdVVJ0tc1aGnkXO9I4AS2pRaTME") {
-      setAnalyzeError("⚠️ API-Key fehlt! Bitte trage deinen kostenlosen Gemini API-Key im Quellcode der App ein.");
+    if (!apiKey || apiKey.trim() === "AQ.Ab8RN6KG8QUfs-FMwk8N9QSlhOAaYnxaz3mc2F-9w6YG-GbwWA") {
+      setAnalyzeError("Fehler: API Key.");
       setIsAnalyzing(false);
       e.target.value = '';
       return;
