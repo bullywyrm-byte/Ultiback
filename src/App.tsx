@@ -75,7 +75,7 @@ function App() {
   const [loginError, setLoginError] = useState('');
 
   const handleRegister = () => {
-    if (loginCode !== '31123112') {
+    if (loginCode !== 'DANIELS-BACKSTUBE-2026') {
       setLoginError('Ungültiger Registrierungs-Code!');
       return;
     }
@@ -134,7 +134,7 @@ function App() {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 fixed left-0 top-0 h-screen bg-white border-r border-stone-200 z-50">
         <div className="p-8">
-          <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Schwind.cc<br/><span className="text-orange-600">Ulti-Back</span></h1>
+          <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Daniels<br/><span className="text-orange-600">Ulti-Back</span></h1>
         </div>
         <nav className="flex-1 px-4 space-y-2">
           <NavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
@@ -498,7 +498,12 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
       reader.onload = async () => {
         try {
           const base64Data = reader.result.split(',')[1];
-          const mimeType = file.type; 
+          let mimeType = file.type; 
+          
+          // Fallback, falls das Betriebssystem bei PDFs keinen Mime-Type mitschickt
+          if (!mimeType && file.name.toLowerCase().endsWith('.pdf')) {
+            mimeType = 'application/pdf';
+          }
 
           const payload = {
             contents: [
@@ -543,7 +548,8 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           };
 
           const apiKey = ""; // API Key is dynamically injected in this environment
-          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+          // Update auf das offizielle, stabile Modell für Multimodale Eingaben (PDF/Bilder)
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
           const response = await fetch(apiUrl, {
             method: 'POST',
@@ -551,9 +557,18 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             body: JSON.stringify(payload)
           });
 
+          if (!response.ok) {
+            console.error("API Fehler-Details:", await response.text());
+            throw new Error("Fehlerhafte Antwort der KI-Schnittstelle.");
+          }
+
           const result = await response.json();
           if (result.candidates && result.candidates.length > 0) {
-            const jsonText = result.candidates[0].content.parts[0].text;
+            let jsonText = result.candidates[0].content.parts[0].text;
+            
+            // Sicherheits-Reinigung: Entfernt mögliche Markdown-Blöcke (```json) der KI
+            jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            
             const data = JSON.parse(jsonText);
 
             // Mappe die KI-Antwort in unser App-Format
@@ -579,7 +594,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             setAnalyzeError("Die Datei konnte nicht gelesen werden.");
           }
         } catch (error) {
-          console.error(error);
+          console.error("Verarbeitungsfehler:", error);
           setAnalyzeError("Verarbeitungsfehler der KI.");
         } finally {
           setIsAnalyzing(false);
@@ -587,6 +602,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
         }
       };
     } catch (err) {
+      console.error("Dateifehler:", err);
       setAnalyzeError("Dateifehler beim Einlesen.");
       setIsAnalyzing(false);
     }
@@ -1399,7 +1415,7 @@ function SettingsView({ user, onLogout, data, setData }) {
           </div>
           
           <div className="text-center pt-8">
-            <p className="text-stone-400 font-bold text-sm">Schwind.cc Ulti-Back v1.0.0 (Release Candidate)</p>
+            <p className="text-stone-400 font-bold text-sm">Daniels Ulti-Back v1.0.0 (Release Candidate)</p>
             <p className="text-stone-300 text-xs mt-1">Alle Daten werden sicher lokal im Browser gespeichert.</p>
           </div>
         </div>
