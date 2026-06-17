@@ -491,10 +491,12 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     setIsAnalyzing(true);
     setAnalyzeError('');
 
-    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo"; 
+    // --- GARANTIERT FUNKTIONIERENDER TEST-KEY ---
+    const apiKey = "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo"; //  
+ 
 
-    if (!apiKey || apiKey.trim() === "AIzaSyBcUrOPlZzCzZZooiUA9y9MpmCU80WmCXo") {
-      setAnalyzeError("Fehler: API-Key.");
+    if (!apiKey || apiKey.length < 20) {
+      setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
       setIsAnalyzing(false);
       e.target.value = '';
       return;
@@ -517,7 +519,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
               {
                 role: "user",
                 parts: [
-                  { text: "Analysiere dieses Rezept (Bild oder Dokument). Extrahiere den Namen des Rezepts, die Zielmenge (Ertrag) und die Einheiten. Erstelle eine strukturierte Liste der Zutaten. Wenn keine Ertragsmenge erkennbar ist, nimm 10 und Stück. Einheit für Zutaten muss zwingend auf eines von g, kg, ml, Liter, Stk, EL, TL formatiert werden." },
+                  { text: "Du bist ein Bäcker-Assistent. Analysiere dieses Rezept. Gebe exakt und ausschließlich valides JSON zurück. Keine Erklärung. JSON Format: {\"title\": \"Name\", \"baseYield\": Zahl, \"yieldUnit\": \"Einheit\", \"instructions\": \"Text\", \"bakeTemp\": \"Temp\", \"bakeTime\": \"Zeit\", \"ingredients\": [{\"name\": \"Zutat\", \"amount\": Zahl, \"unit\": \"g/kg/ml/Stk\"}]}" },
                   {
                     inlineData: {
                       mimeType: mimeType,
@@ -529,28 +531,6 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             ],
             generationConfig: {
               responseMimeType: "application/json",
-              responseSchema: {
-                type: "OBJECT",
-                properties: {
-                  title: { type: "STRING", description: "Name des Rezepts" },
-                  baseYield: { type: "NUMBER", description: "Menge des Ertrags, nur Zahl" },
-                  yieldUnit: { type: "STRING", description: "Einheit des Ertrags (Stk, Laibe, etc.)" },
-                  instructions: { type: "STRING", description: "Details zur Aufarbeitung, Zubereitung oder Knetzeit" },
-                  bakeTemp: { type: "STRING", description: "Backtemperatur (z.B. '240°C fallend auf 210°C')" },
-                  bakeTime: { type: "STRING", description: "Backzeit (z.B. '45 Min')" },
-                  ingredients: {
-                    type: "ARRAY",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        name: { type: "STRING", description: "Name der Zutat" },
-                        amount: { type: "NUMBER", description: "Menge als Zahl" },
-                        unit: { type: "STRING", description: "Einheit (g, kg, ml, Liter, Stk)" }
-                      }
-                    }
-                  }
-                }
-              }
             }
           };
 
@@ -565,7 +545,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           if (!response.ok) {
             const errText = await response.text();
             console.error("API Fehler-Details:", errText);
-            throw new Error(`Google Server hat die Anfrage abgelehnt (Status: ${response.status}). Überprüfe den API-Key.`);
+            throw new Error("Fehler beim Senden an Google. Bitte prüfe deinen API-Key.");
           }
 
           const result = await response.json();
@@ -573,27 +553,27 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             let jsonText = result.candidates[0].content.parts[0].text;
             
             // Erweiterte Sicherheits-Reinigung für fehlerhafte KI Antworten
-            jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            jsonText = jsonText.replace(/```json/gi, '').replace(/```/g, '').trim();
             
             let data;
             try {
               data = JSON.parse(jsonText);
             } catch (parseErr) {
               console.error("Ungültiges JSON von der KI erhalten:", jsonText);
-              throw new Error("Die KI hat die Daten in einem unlesbaren Format zurückgegeben.");
+              throw new Error("Die KI hat die Daten nicht als gültiges Format zurückgegeben.");
             }
 
             const newIngredients = (data.ingredients || []).map(ing => ({
               type: 'ingredient',
               name: ing.name || 'Unbekannte Zutat',
-              amount: ing.amount || 0,
+              amount: parseFloat(ing.amount) || 0,
               unit: ing.unit || 'g'
             }));
 
             setEdited(prev => ({
               ...prev,
               title: data.title && prev.title === 'Neues Rezept' ? data.title : prev.title,
-              baseYield: data.baseYield || prev.baseYield,
+              baseYield: parseFloat(data.baseYield) || prev.baseYield,
               yieldUnit: data.yieldUnit || prev.yieldUnit,
               instructions: data.instructions || prev.instructions,
               bakeTemp: data.bakeTemp || prev.bakeTemp,
@@ -641,7 +621,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           <div className="w-full md:w-auto">
             {isAnalyzing ? (
               <div className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center opacity-80 cursor-wait">
-                <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Analysiere Dokument...
+                <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Analysiere...
               </div>
             ) : (
               <label className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-orange-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center whitespace-nowrap">
