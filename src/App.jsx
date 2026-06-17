@@ -44,8 +44,8 @@ class ErrorBoundary extends React.Component {
           <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
           <h1 className="text-2xl font-black text-stone-800 mb-2">Hoppla! Ein Fehler ist aufgetreten.</h1>
           <p className="text-stone-500 mb-6 max-w-md">Die App hat einen unerwarteten Zustand erreicht. Keine Sorge, deine Daten sind sicher lokal gespeichert.</p>
-          <button 
-            onClick={() => window.location.reload()} 
+          <button
+            onClick={() => window.location.reload()}
             className="bg-stone-800 text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg active:scale-95 transition-all"
           >
             <RefreshCw className="w-5 h-5 mr-2" /> App neu laden
@@ -60,7 +60,7 @@ class ErrorBoundary extends React.Component {
 function App() {
   const [user, setUser] = useLocalDB('ulti_back_user', null);
   const [activeTab, setActiveTab] = useState('inventory');
-  
+
   const [inventory, setInventory] = useLocalDB('ulti_back_inventory', []);
   const [recipes, setRecipes] = useLocalDB('ulti_back_recipes', []);
   const [customPrices, setCustomPrices] = useLocalDB('ulti_back_customPrices', {});
@@ -97,7 +97,7 @@ function App() {
             <h1 className="text-3xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
             <p className="text-orange-600 font-bold mt-1">Registrierung & Login</p>
           </div>
-          
+
           {loginError && (
             <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm font-bold border border-red-100 flex items-center">
               <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {loginError}
@@ -117,7 +117,7 @@ function App() {
               <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Geheimer Inhaber-Code</label>
               <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)} className="w-full bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black tracking-widest text-center" placeholder="CODE EINGEBEN" />
             </div>
-            
+
             <button onClick={handleRegister} className="w-full bg-stone-800 text-white mt-4 py-4 rounded-2xl font-bold shadow-md hover:bg-stone-900 transition-colors text-lg active:scale-95">
               Account erstellen / Einloggen
             </button>
@@ -131,7 +131,7 @@ function App() {
     <div className="min-h-screen bg-stone-100 font-sans pb-24 md:pb-0 md:pl-64 flex flex-col">
       <aside className="hidden md:flex flex-col w-64 fixed left-0 top-0 h-screen bg-white border-r border-stone-200 z-50">
         <div className="p-8">
-          <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Daniels<br/><span className="text-orange-600">Ulti-Back</span></h1>
+          <h1 className="text-2xl font-black text-stone-800 tracking-tight leading-none">Daniels<br /><span className="text-orange-600">Ulti-Back</span></h1>
         </div>
         <nav className="flex-1 px-4 space-y-2">
           <NavButton icon={Box} label="Lager" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
@@ -154,7 +154,7 @@ function App() {
         {activeTab === 'recipes' && <RecipeView recipes={recipes} setRecipes={setRecipes} />}
         {activeTab === 'kalkulation' && <CalculationView customPrices={customPrices} setCustomPrices={setCustomPrices} recipes={recipes} />}
         {activeTab === 'production' && <ProductionView productionLogs={productionLogs} setProductionLogs={setProductionLogs} recipes={recipes} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
-        {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{inventory, recipes, customPrices, productionLogs, weeklyPlan}} setData={{setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan}} />}
+        {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{ inventory, recipes, customPrices, productionLogs, weeklyPlan }} setData={{ setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan }} />}
       </main>
 
       <nav className="md:hidden fixed bottom-0 w-full bg-stone-100/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50">
@@ -172,7 +172,7 @@ function App() {
 
 function NavButton({ icon: Icon, label, active, onClick }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`w-full flex items-center px-4 py-3 rounded-2xl font-bold transition-all ${active ? 'bg-orange-50 text-orange-600' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'}`}
     >
@@ -184,7 +184,7 @@ function NavButton({ icon: Icon, label, active, onClick }) {
 
 function MobileNavButton({ icon: Icon, label, active, onClick }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`flex flex-col items-center p-2 min-w-[64px] rounded-xl transition-all ${active ? 'text-orange-600' : 'text-stone-400'}`}
     >
@@ -239,21 +239,21 @@ function InventoryView({ inventory, setInventory }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div className="col-span-2 md:col-span-1">
               <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Bezeichnung</label>
-              <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="z.B. Weizenmehl Typ 550" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+              <input type="text" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="z.B. Weizenmehl Typ 550" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
             </div>
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Bestand</label>
-              <input type="number" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: e.target.value})} placeholder="0" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+              <input type="number" value={newItem.stock} onChange={e => setNewItem({ ...newItem, stock: e.target.value })} placeholder="0" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
             </div>
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Einheit</label>
-              <select value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none font-bold">
+              <select value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl outline-none font-bold">
                 <option value="kg">kg</option><option value="Liter">Liter</option><option value="Stk">Stück</option>
               </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase mb-2">1-Klick Schritt</label>
-              <input type="number" value={newItem.step} onChange={e => setNewItem({...newItem, step: e.target.value})} placeholder="25" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
+              <input type="number" value={newItem.step} onChange={e => setNewItem({ ...newItem, step: e.target.value })} placeholder="25" className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
             </div>
           </div>
           <button onClick={handleAdd} className="w-full bg-stone-800 text-white px-6 py-4 rounded-xl font-bold hover:bg-stone-900 transition-colors">Produkt anlegen</button>
@@ -271,7 +271,7 @@ function InventoryView({ inventory, setInventory }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {inventory.map(item => (
           <div key={item.id} className="bg-white rounded-[2rem] p-2 flex items-center justify-between shadow-sm border border-stone-200 relative overflow-hidden group">
-            <button 
+            <button
               onClick={() => updateStock(item.id, -item.step)}
               className="flex-1 flex flex-col justify-center px-6 py-6 hover:bg-red-50 rounded-2xl transition-colors text-left"
             >
@@ -286,7 +286,7 @@ function InventoryView({ inventory, setInventory }) {
                 Klick zieht {item.step}{item.unit} ab
               </div>
             </button>
-            
+
             <div className="flex flex-col gap-2 p-2 shrink-0">
               <button onClick={() => updateStock(item.id, item.step)} className="w-14 h-14 bg-stone-100 hover:bg-emerald-100 text-stone-600 hover:text-emerald-600 rounded-2xl flex items-center justify-center transition-colors active:scale-95">
                 <Plus className="w-6 h-6" />
@@ -331,15 +331,15 @@ function RecipeView({ recipes, setRecipes }) {
 
   const deleteRecipe = (id) => {
     setRecipes(recipes.filter(r => r.id !== id));
-    if(editingRecipe?.id === id) setEditingRecipe(null);
+    if (editingRecipe?.id === id) setEditingRecipe(null);
   };
 
   if (editingRecipe) {
-    return <RecipeEditor 
-      recipe={editingRecipe} 
+    return <RecipeEditor
+      recipe={editingRecipe}
       allRecipes={recipes}
-      onSave={saveRecipe} 
-      onCancel={() => setEditingRecipe(null)} 
+      onSave={saveRecipe}
+      onCancel={() => setEditingRecipe(null)}
     />;
   }
 
@@ -377,10 +377,10 @@ function RecipeView({ recipes, setRecipes }) {
                 </div>
                 <div className="flex items-center gap-3 bg-stone-50 p-2 rounded-2xl border border-stone-100">
                   <span className="text-xs font-bold text-stone-400 uppercase ml-2 tracking-wider">Ziel-Menge:</span>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={currentScale}
-                    onChange={(e) => setScalingMultiplier({...scalingMultiplier, [recipe.id]: parseFloat(e.target.value) || 1})}
+                    onChange={(e) => setScalingMultiplier({ ...scalingMultiplier, [recipe.id]: parseFloat(e.target.value) || 1 })}
                     className="w-24 bg-white border border-stone-200 rounded-xl px-3 py-2 text-center font-black text-lg focus:ring-2 focus:ring-orange-500 outline-none"
                   />
                   <span className="text-sm font-bold text-stone-500 mr-2">{recipe.yieldUnit}</span>
@@ -453,36 +453,36 @@ function RecipeView({ recipes, setRecipes }) {
 }
 
 function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
-  const [edited, setEdited] = useState({...recipe});
+  const [edited, setEdited] = useState({ ...recipe });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState('');
 
-  const updateField = (field, value) => setEdited({...edited, [field]: value});
+  const updateField = (field, value) => setEdited({ ...edited, [field]: value });
 
   const addIngredient = () => {
-    setEdited({...edited, ingredients: [...edited.ingredients, { type: 'ingredient', name: '', amount: '', unit: 'g' }]});
+    setEdited({ ...edited, ingredients: [...edited.ingredients, { type: 'ingredient', name: '', amount: '', unit: 'g' }] });
   };
 
   const addRecipeReference = () => {
-    setEdited({...edited, ingredients: [...edited.ingredients, { type: 'recipe', refId: '', amount: '', unit: 'kg' }]});
+    setEdited({ ...edited, ingredients: [...edited.ingredients, { type: 'recipe', refId: '', amount: '', unit: 'kg' }] });
   };
 
   const updateIngredient = (index, field, value) => {
     const newIngs = [...edited.ingredients];
     newIngs[index][field] = value;
-    setEdited({...edited, ingredients: newIngs});
+    setEdited({ ...edited, ingredients: newIngs });
   };
 
   const removeIngredient = (index) => {
-    setEdited({...edited, ingredients: edited.ingredients.filter((_, i) => i !== index)});
+    setEdited({ ...edited, ingredients: edited.ingredients.filter((_, i) => i !== index) });
   };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    const apiKey = "AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ";
 
     if (!apiKey || !apiKey.startsWith("AQ.")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
@@ -507,11 +507,11 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ 
+              contents: [{
                 parts: [
-                  { text: 'Analysiere das beigefügte Rezept. Gebe exakt und ausschließlich valides JSON zurück. Keine Erklärungen. Format: {"title": "String", "baseYield": Number, "yieldUnit": "String", "instructions": "String", "bakeTemp": "String", "bakeTime": "String", "ingredients": [{"name": "String", "amount": Number, "unit": "String"}]}' }, 
+                  { text: 'Analysiere das beigefügte Rezept. Gebe exakt und ausschließlich valides JSON zurück. Keine Erklärungen. Format: {"title": "String", "baseYield": Number, "yieldUnit": "String", "instructions": "String", "bakeTemp": "String", "bakeTime": "String", "ingredients": [{"name": "String", "amount": Number, "unit": "String"}]}' },
                   { inlineData: { mimeType: mimeType, data: base64Data } }
-                ] 
+                ]
               }],
               generationConfig: { responseMimeType: "application/json" }
             })
@@ -534,7 +534,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             instructions: data.instructions || prev.instructions,
             bakeTemp: data.bakeTemp || prev.bakeTemp,
             bakeTime: data.bakeTime || prev.bakeTime,
-            ingredients: [...prev.ingredients, ...data.ingredients.map(i => ({...i, type: 'ingredient'}))]
+            ingredients: [...prev.ingredients, ...data.ingredients.map(i => ({ ...i, type: 'ingredient' }))]
           }));
 
         } catch (error) {
@@ -568,7 +568,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             </h4>
             <p className="text-sm text-orange-800/70 mt-1">Lade ein Rezept hoch. Unsere KI liest es für dich aus.</p>
           </div>
-          
+
           <div className="w-full md:w-auto">
             {isAnalyzing ? (
               <div className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center opacity-80 cursor-wait">
@@ -577,20 +577,20 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
             ) : (
               <label className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-orange-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center whitespace-nowrap">
                 <Plus className="w-5 h-5 mr-2" /> Rezept scannen
-                <input 
-                  type="file" 
-                  accept="application/pdf, image/jpeg, image/png" 
-                  onChange={handleFileUpload} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept="application/pdf, image/jpeg, image/png"
+                  onChange={handleFileUpload}
+                  className="hidden"
                 />
               </label>
             )}
           </div>
         </div>
-        
+
         {analyzeError && (
           <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-bold border border-red-200 flex items-start">
-            <AlertCircle className="w-5 h-5 mr-2 shrink-0 mt-0.5" /> 
+            <AlertCircle className="w-5 h-5 mr-2 shrink-0 mt-0.5" />
             <div>{analyzeError}</div>
           </div>
         )}
@@ -615,15 +615,15 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
           <div className="flex justify-between items-center mb-4">
             <label className="block text-sm font-bold text-stone-800 uppercase tracking-wider">Zutaten & Vorstufen</label>
           </div>
-          
+
           <div className="space-y-3 mb-6">
             {edited.ingredients.map((ing, idx) => (
               <div key={idx} className={`flex flex-wrap md:flex-nowrap gap-2 items-center p-2 rounded-xl border ${ing.type === 'recipe' ? 'bg-orange-50/50 border-orange-100' : 'bg-stone-50 border-stone-200'}`}>
                 {ing.type === 'recipe' ? (
                   <div className="flex-1 min-w-[200px] flex gap-2">
                     <Layers className="w-10 h-10 p-2 bg-orange-100 text-orange-600 rounded-lg shrink-0" />
-                    <select 
-                      value={ing.refId} 
+                    <select
+                      value={ing.refId}
                       onChange={e => updateIngredient(idx, 'refId', e.target.value)}
                       className="flex-1 bg-white border border-orange-200 px-3 py-2 rounded-lg font-bold outline-none text-orange-900"
                     >
@@ -634,7 +634,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
                 ) : (
                   <input type="text" placeholder="Zutat" value={ing.name} onChange={e => updateIngredient(idx, 'name', e.target.value)} className="flex-1 min-w-[150px] bg-white border border-stone-200 px-3 py-2 rounded-lg font-bold outline-none" />
                 )}
-                
+
                 <div className="flex gap-2 ml-auto">
                   <input type="number" placeholder="Menge" value={ing.amount} onChange={e => updateIngredient(idx, 'amount', e.target.value)} className="w-20 bg-white border border-stone-200 px-3 py-2 rounded-lg font-bold text-center outline-none" />
                   <select value={ing.unit} onChange={e => updateIngredient(idx, 'unit', e.target.value)} className="w-20 bg-white border border-stone-200 px-2 py-2 rounded-lg font-bold outline-none">
@@ -658,7 +658,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
 
         <div className="pt-6 border-t border-stone-100">
           <label className="block text-sm font-bold text-stone-800 uppercase tracking-wider mb-4">Zubereitung & Backen</label>
-          
+
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Backtemperatur</label>
@@ -675,15 +675,15 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
               </div>
             </div>
           </div>
-          
+
           <div>
             <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Aufarbeitung & Hinweise</label>
-            <textarea 
-              value={edited.instructions || ''} 
-              onChange={e => updateField('instructions', e.target.value)} 
-              placeholder="Teigruhe, Knetzeiten, Aufarbeitungsschritte..." 
+            <textarea
+              value={edited.instructions || ''}
+              onChange={e => updateField('instructions', e.target.value)}
+              placeholder="Teigruhe, Knetzeiten, Aufarbeitungsschritte..."
               rows={4}
-              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold resize-y" 
+              className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold resize-y"
             />
           </div>
         </div>
@@ -738,15 +738,15 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
     if (ing.type === 'recipe') {
       const subRecipe = recipes.find(r => r.id === ing.refId);
       if (!subRecipe) return { cost: 0, label: 'Unbekanntes Rezept', basePrice: 0 };
-      
+
       let subTotal = 0;
       subRecipe.ingredients.forEach(subIng => {
         subTotal += calculateIngredientCost(subIng).cost;
       });
-      
+
       const subYieldAmt = parseFloat(subRecipe.baseYield) || 1;
       const subCostPerUnit = subTotal / subYieldAmt;
-      
+
       const neededAmt = parseFloat(ing.amount) || 0;
       let factor = 0;
       const u = (ing.unit || '').toLowerCase();
@@ -754,8 +754,8 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
       else if (u === 'kg' || u === 'l' || u === 'liter') factor = neededAmt;
       else factor = neededAmt;
 
-      return { 
-        cost: factor * subCostPerUnit, 
+      return {
+        cost: factor * subCostPerUnit,
         label: subRecipe.title,
         basePrice: subCostPerUnit,
         isRecipe: true
@@ -764,7 +764,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
       const neededAmt = parseFloat(ing.amount) || 0;
       const u = (ing.unit || '').toLowerCase();
       let factor = 0;
-      
+
       if (u === 'g' || u === 'ml') factor = neededAmt / 1000;
       else if (u === 'kg' || u === 'l' || u === 'liter' || u === 'stk') factor = neededAmt;
       else if (u === 'el') factor = neededAmt * 0.015;
@@ -816,7 +816,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
 
         <div>
           <label className="block text-sm font-bold text-stone-600 mb-2">Rezept zur Live-Kalkulation auswählen</label>
-          <select 
+          <select
             className="w-full px-4 py-4 bg-stone-50 border border-stone-200 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none text-lg font-medium shadow-inner"
             value={selectedRecipeId}
             onChange={(e) => setSelectedRecipeId(e.target.value)}
@@ -832,7 +832,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
       {calculationData && selectedRecipe && (
         <div className="animate-in slide-in-from-bottom-4 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
+
             <div className="bg-stone-800 text-white p-6 rounded-[2rem] shadow-sm flex flex-col justify-between">
               <div>
                 <span className="text-stone-400 font-bold uppercase tracking-wider text-sm mb-2 block">Materialkosten (Gesamt)</span>
@@ -851,7 +851,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
                 <div className="text-5xl font-black">{suggestedPrice.toFixed(2)} €</div>
                 <div className="mt-2 text-orange-200 font-medium">pro {selectedRecipe.yieldUnit.replace(/s$/i, '').replace(/e$/i, '')}</div>
               </div>
-              
+
               <div className="mt-6 bg-orange-700/40 p-4 rounded-3xl backdrop-blur-sm border border-orange-500/30 flex flex-row items-center justify-around gap-2 sm:gap-4 shrink-0">
                 <div className="flex flex-col items-center flex-1">
                   <label className="text-[10px] uppercase font-black text-orange-200 mb-1.5 tracking-wider text-center">Faktor (%)</label>
@@ -888,7 +888,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
             <h3 className="text-xl font-bold text-stone-800 mb-4 flex items-center">
               <ListPlus className="w-5 h-5 mr-2 text-stone-400" /> Einzelaufstellung & Eigene Preise
             </h3>
-            
+
             <ul className="divide-y divide-stone-100">
               {calculationData.details.map((ing, idx) => (
                 <li key={idx} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 group">
@@ -898,12 +898,12 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
                       {ing.label}
                     </span>
                     <span className="text-stone-500 font-medium text-sm">
-                      {ing.amount} {ing.unit} 
-                      <span className="mx-2">•</span> 
+                      {ing.amount} {ing.unit}
+                      <span className="mx-2">•</span>
                       Basis: {ing.basePrice.toFixed(2)} € / {ing.isRecipe ? 'Unit' : 'kg/L/Stk'}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center space-x-3">
                     {editingPrice === ing.name && !ing.isRecipe ? (
                       <div className="flex items-center space-x-2 bg-stone-100 p-1.5 rounded-xl">
@@ -914,7 +914,7 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
                     ) : (
                       <>
                         {!ing.isRecipe ? (
-                          <button 
+                          <button
                             onClick={() => { setTempPrice(ing.basePrice); setEditingPrice(ing.name); }}
                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${ing.isCustom ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
                           >
@@ -942,16 +942,16 @@ function CalculationView({ customPrices, setCustomPrices, recipes }) {
 }
 
 function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan, setWeeklyPlan }) {
-  const [activeSubTab, setActiveSubTab] = useState('plan'); 
-  
+  const [activeSubTab, setActiveSubTab] = useState('plan');
+
   const [planRecipeId, setPlanRecipeId] = useState('');
   const [planAmount, setPlanAmount] = useState('');
 
   const [showAddLog, setShowAddLog] = useState(false);
-  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0,10));
+  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0, 10));
   const [logTags, setLogTags] = useState([]);
   const [customTagInput, setCustomTagInput] = useState('');
-  
+
   const [logItems, setLogItems] = useState([{ id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
 
   const AVAILABLE_TAGS = ['☀️ Sonne', '🌧️ Regen', '❄️ Schnee', '🌡️ Hitze', '🎒 Ferien', '🎊 Feiertag', '🎪 Event'];
@@ -979,7 +979,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
 
   const shoppingList = useMemo(() => {
     const totals = {};
-    
+
     weeklyPlan.forEach(planItem => {
       const recipe = recipes.find(r => r.id === planItem.recipeId);
       if (!recipe) return;
@@ -1010,7 +1010,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
       };
       resolveIngredients(planItem.recipeId, baseScale);
     });
-    
+
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
   }, [weeklyPlan, recipes]);
 
@@ -1043,9 +1043,9 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
     const validItems = logItems.filter(item => item.productName.trim() !== '' && (item.sold !== '' || item.leftover !== ''));
     if (validItems.length === 0) return;
 
-    const newDayLog = { 
-      id: 'day_' + Date.now().toString(), 
-      date: logDate, 
+    const newDayLog = {
+      id: 'day_' + Date.now().toString(),
+      date: logDate,
       tags: logTags,
       items: validItems.map(item => ({
         productName: item.productName,
@@ -1065,7 +1065,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
 
   const groupedLogs = useMemo(() => {
     const groups = {};
-    
+
     productionLogs.forEach(log => {
       const dateStr = log.date;
       if (!groups[dateStr]) {
@@ -1077,7 +1077,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
           originalIds: []
         };
       }
-      
+
       groups[dateStr].originalIds.push(log.id);
       if (log.tags) log.tags.forEach(t => groups[dateStr].tags.add(t));
 
@@ -1195,14 +1195,14 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
           {showAddLog && (
             <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-md border border-stone-200 animate-in slide-in-from-top-4">
               <h3 className="text-2xl font-black text-stone-800 mb-6">Tagestabelle</h3>
-              
+
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="md:w-1/3">
                     <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Datum wählen</label>
                     <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
                   </div>
-                  
+
                   <div className="md:w-2/3 border-l-0 md:border-l border-stone-100 md:pl-6">
                     <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Besondere Bedingungen (Wetter, Event...)</label>
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -1218,13 +1218,13 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
                       ))}
                     </div>
                     <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        value={customTagInput} 
-                        onChange={e => setCustomTagInput(e.target.value)} 
-                        onKeyDown={e => { if(e.key === 'Enter') handleAddCustomTag(e); }}
-                        placeholder="Eigene Bedingung tippen..." 
-                        className="flex-1 bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm" 
+                      <input
+                        type="text"
+                        value={customTagInput}
+                        onChange={e => setCustomTagInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddCustomTag(e); }}
+                        placeholder="Eigene Bedingung tippen..."
+                        className="flex-1 bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
                       />
                       <button onClick={handleAddCustomTag} className="bg-stone-200 hover:bg-stone-300 text-stone-700 px-4 py-3 rounded-xl font-bold transition-colors text-sm">Hinzufügen</button>
                     </div>
@@ -1247,7 +1247,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
                         {logItems.map((item, index) => (
                           <tr key={item.id} className="border-b border-stone-100 last:border-0 group hover:bg-stone-50 transition-colors">
                             <td className="p-2">
-                              <input autoFocus={index === logItems.length -1} type="text" value={item.productName} onChange={e => updateLogItem(item.id, 'productName', e.target.value)} placeholder="z.B. Bauernbrot" className="w-full bg-white border border-stone-200 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-700 placeholder:font-normal" />
+                              <input autoFocus={index === logItems.length - 1} type="text" value={item.productName} onChange={e => updateLogItem(item.id, 'productName', e.target.value)} placeholder="z.B. Bauernbrot" className="w-full bg-white border border-stone-200 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-700 placeholder:font-normal" />
                             </td>
                             <td className="p-2">
                               <input type="number" value={item.sold} onChange={e => updateLogItem(item.id, 'sold', e.target.value)} placeholder="0" className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-black text-center" />
@@ -1293,8 +1293,8 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
                         ))}
                       </div>
                     </div>
-                    <button 
-                      onClick={() => deleteDayGroup(group.originalIds)} 
+                    <button
+                      onClick={() => deleteDayGroup(group.originalIds)}
                       className="w-12 h-12 shrink-0 bg-stone-700/50 hover:bg-red-500 text-stone-300 hover:text-white rounded-2xl flex items-center justify-center transition-colors"
                       title="Gesamten Tag löschen"
                     >
@@ -1356,12 +1356,12 @@ function SettingsView({ user, onLogout, data, setData }) {
       weeklyPlan: data.weeklyPlan,
       exportDate: new Date().toISOString()
     };
-    
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ulti-back-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `ulti-back-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1376,7 +1376,7 @@ function SettingsView({ user, onLogout, data, setData }) {
     reader.onload = (event) => {
       try {
         const imported = JSON.parse(event.target.result);
-        
+
         if (imported.inventory && Array.isArray(imported.inventory)) setData.setInventory(imported.inventory);
         if (imported.recipes && Array.isArray(imported.recipes)) setData.setRecipes(imported.recipes);
         if (imported.customPrices) setData.setCustomPrices(imported.customPrices);
@@ -1413,7 +1413,7 @@ function SettingsView({ user, onLogout, data, setData }) {
 
           <div className="pt-6 border-t border-stone-100">
             <h3 className="text-lg font-black text-stone-800 mb-4">Lokale Daten & Backup</h3>
-            
+
             {importStatus && (
               <div className={`p-4 rounded-xl mb-4 font-bold ${importStatus.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
                 {importStatus.msg}
@@ -1435,7 +1435,7 @@ function SettingsView({ user, onLogout, data, setData }) {
               </label>
             </div>
           </div>
-          
+
           <div className="text-center pt-8">
             <p className="text-stone-400 font-bold text-sm">Daniels Ulti-Back v1.0.0 (Release Candidate)</p>
             <p className="text-stone-300 text-xs mt-1">Alle Daten werden sicher lokal im Browser gespeichert.</p>
