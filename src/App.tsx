@@ -1013,14 +1013,14 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
   const [planRecipeId, setPlanRecipeId] = useState('');
   const [planAmount, setPlanAmount] = useState('');
 
-  // States für Logbuch
+  // States für Logbuch (NEUES TABELLEN-FORMAT)
   const [showAddLog, setShowAddLog] = useState(false);
   const [logDate, setLogDate] = useState(new Date().toISOString().slice(0,10));
-  const [logProductText, setLogProductText] = useState(''); // NEU: Freitext statt Rezept-ID
-  const [logSold, setLogSold] = useState('');
-  const [logReturn, setLogReturn] = useState('');
   const [logTags, setLogTags] = useState([]);
   const [customTagInput, setCustomTagInput] = useState('');
+  
+  // Die Tabelle für den aktuellen Tag
+  const [logItems, setLogItems] = useState([{ id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
 
   const AVAILABLE_TAGS = ['☀️ Sonne', '🌧️ Regen', '❄️ Schnee', '🌡️ Hitze', '🎒 Ferien', '🎊 Feiertag', '🎪 Event'];
 
@@ -1083,26 +1083,6 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
   }, [weeklyPlan, recipes]);
 
-  const handleSaveLog = () => {
-    if (!logProductText || !logSold) return;
-    const log = { 
-      id: Date.now().toString(), 
-      date: logDate, 
-      productText: logProductText, // NEU: Speichert Freitext
-      tags: logTags,
-      sold: parseFloat(logSold), 
-      leftover: parseFloat(logReturn || 0),
-      produced: parseFloat(logSold) + parseFloat(logReturn || 0)
-    };
-    setProductionLogs([log, ...productionLogs]);
-    setShowAddLog(false);
-    setLogProductText('');
-    setLogSold('');
-    setLogReturn('');
-    setLogTags([]);
-    setCustomTagInput('');
-  };
-
   const toggleTag = (tag) => {
     setLogTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
@@ -1114,6 +1094,89 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
       setLogTags([...logTags, tag]);
     }
     setCustomTagInput('');
+  };
+
+  const addLogItemRow = () => {
+    setLogItems([...logItems, { id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
+  };
+
+  const updateLogItem = (id, field, value) => {
+    setLogItems(logItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const removeLogItemRow = (id) => {
+    setLogItems(logItems.filter(item => item.id !== id));
+  };
+
+  const handleSaveDayLog = () => {
+    // Filtere leere Zeilen raus
+    const validItems = logItems.filter(item => item.productName.trim() !== '' && (item.sold !== '' || item.leftover !== ''));
+    if (validItems.length === 0) return;
+
+    const newDayLog = { 
+      id: 'day_' + Date.now().toString(), 
+      date: logDate, 
+      tags: logTags,
+      items: validItems.map(item => ({
+        productName: item.productName,
+        sold: parseFloat(item.sold) || 0,
+        leftover: parseFloat(item.leftover) || 0
+      }))
+    };
+
+    setProductionLogs([newDayLog, ...productionLogs]);
+    setShowAddLog(false);
+    setLogTags([]);
+    setCustomTagInput('');
+    setLogItems([{ id: Date.now().toString(), productName: '', sold: '', leftover: '' }]);
+  };
+
+  // Prüft, ob mindestens eine Zeile ausfüllt ist, um den Speichern-Button freizugeben
+  const hasValidItems = logItems.some(item => item.productName.trim() !== '' && (item.sold !== '' || item.leftover !== ''));
+
+  const groupedLogs = useMemo(() => {
+    const groups = {};
+    
+    productionLogs.forEach(log => {
+      const dateStr = log.date;
+      if (!groups[dateStr]) {
+        groups[dateStr] = {
+          id: dateStr,
+          date: dateStr,
+          tags: new Set(),
+          items: [],
+          originalIds: [] // Zum Löschen der ganzen Gruppe
+        };
+      }
+      
+      groups[dateStr].originalIds.push(log.id);
+      if (log.tags) log.tags.forEach(t => groups[dateStr].tags.add(t));
+
+      if (log.items) {
+        // Neues Tabellen-Format
+        log.items.forEach(item => groups[dateStr].items.push(item));
+      } else {
+        // Altes Format abfangen und umwandeln
+        let pName = log.productText;
+        if (!pName && log.recipeId) {
+          const rec = recipes.find(r => r.id === log.recipeId);
+          pName = rec ? rec.title : 'Unbekanntes Produkt';
+        }
+        groups[dateStr].items.push({
+          productName: pName,
+          sold: parseFloat(log.sold) || 0,
+          leftover: parseFloat(log.leftover) || 0
+        });
+      }
+    });
+
+    return Object.values(groups)
+      .map(g => ({ ...g, tags: Array.from(g.tags) }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [productionLogs, recipes]);
+
+  const deleteDayGroup = (originalIds) => {
+    setProductionLogs(productionLogs.filter(log => !originalIds.includes(log.id)));
   };
 
   return (
@@ -1132,6 +1195,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
 
       {activeSubTab === 'plan' && (
         <div className="space-y-6 animate-in fade-in">
+          {/* Wochenplan UI bleibt unangetastet */}
           <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200">
             <h3 className="text-xl font-bold text-stone-800 mb-6 flex items-center"><Activity className="w-5 h-5 mr-2 text-orange-600" /> Wochenmenge festlegen</h3>
             <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -1197,120 +1261,155 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
 
       {activeSubTab === 'log' && (
         <div className="space-y-6 animate-in fade-in">
-          <button onClick={() => setShowAddLog(!showAddLog)} className="w-full bg-white border-2 border-dashed border-stone-300 hover:border-orange-400 hover:bg-orange-50 text-stone-500 hover:text-orange-600 font-bold py-6 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-2">
+          <button onClick={() => setShowAddLog(!showAddLog)} className="w-full bg-white border-2 border-dashed border-stone-300 hover:border-orange-400 hover:bg-orange-50 text-stone-500 hover:text-orange-600 font-bold py-6 rounded-[2rem] transition-all flex flex-col items-center justify-center gap-2 shadow-sm">
             {showAddLog ? <X className="w-8 h-8" /> : <Plus className="w-8 h-8" />}
-            <span>{showAddLog ? 'Abbrechen' : 'Neuen Tag / Produkt erfassen'}</span>
+            <span>{showAddLog ? 'Abbrechen' : 'Neuen Tag erfassen (Tabelle öffnen)'}</span>
           </button>
 
           {showAddLog && (
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-stone-200 animate-in slide-in-from-top-4">
-              <h3 className="text-xl font-bold text-stone-800 mb-6">Logbuch-Eintrag</h3>
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-md border border-stone-200 animate-in slide-in-from-top-4">
+              <h3 className="text-2xl font-black text-stone-800 mb-6">Tagestabelle</h3>
+              
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Datum</label>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="md:w-1/3">
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Datum wählen</label>
                     <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Produkt(e) / Notizen</label>
-                    <textarea 
-                      value={logProductText} 
-                      onChange={e => setLogProductText(e.target.value)} 
-                      placeholder="Freitext für Tagesproduktion...&#10;z.B. Bauernbrot&#10;Sondertorte Hochzeit" 
-                      rows={3}
-                      className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-800 resize-y" 
-                    />
+                  
+                  <div className="md:w-2/3 border-l-0 md:border-l border-stone-100 md:pl-6">
+                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Besondere Bedingungen (Wetter, Event...)</label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {AVAILABLE_TAGS.map(tag => (
+                        <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 ${logTags.includes(tag) ? 'bg-orange-100 border-orange-300 text-orange-800 shadow-sm' : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}>
+                          {tag}
+                        </button>
+                      ))}
+                      {logTags.filter(t => !AVAILABLE_TAGS.includes(t)).map(tag => (
+                        <button key={tag} onClick={() => toggleTag(tag)} className="px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 bg-orange-100 border-orange-300 text-orange-800 shadow-sm">
+                          {tag} <X className="w-3 h-3 inline ml-1" />
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={customTagInput} 
+                        onChange={e => setCustomTagInput(e.target.value)} 
+                        onKeyDown={e => { if(e.key === 'Enter') handleAddCustomTag(e); }}
+                        placeholder="Eigene Bedingung tippen..." 
+                        className="flex-1 bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm" 
+                      />
+                      <button onClick={handleAddCustomTag} className="bg-stone-200 hover:bg-stone-300 text-stone-700 px-4 py-3 rounded-xl font-bold transition-colors text-sm">Hinzufügen</button>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Besondere Bedingungen (Wetter, Event...)</label>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {AVAILABLE_TAGS.map(tag => (
-                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 ${logTags.includes(tag) ? 'bg-orange-100 border-orange-300 text-orange-800 shadow-sm' : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}>
-                        {tag}
-                      </button>
-                    ))}
-                    {/* Eigene Tags anzeigen */}
-                    {logTags.filter(t => !AVAILABLE_TAGS.includes(t)).map(tag => (
-                      <button key={tag} onClick={() => toggleTag(tag)} className="px-4 py-2 rounded-xl text-sm font-bold border-2 transition-colors active:scale-95 bg-orange-100 border-orange-300 text-orange-800 shadow-sm">
-                        {tag} <X className="w-3 h-3 inline ml-1" />
-                      </button>
-                    ))}
-                  </div>
-                  {/* Eingabefeld für eigene Bedingungen */}
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={customTagInput} 
-                      onChange={e => setCustomTagInput(e.target.value)} 
-                      onKeyDown={e => { if(e.key === 'Enter') handleAddCustomTag(e); }}
-                      placeholder="Eigene Bedingung tippen..." 
-                      className="flex-1 bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm" 
-                    />
-                    <button onClick={handleAddCustomTag} className="bg-stone-200 hover:bg-stone-300 text-stone-700 px-4 py-3 rounded-xl font-bold transition-colors text-sm">
-                      Hinzufügen
+                {/* Die neue Tabelle */}
+                <div className="pt-6 border-t border-stone-100">
+                  <label className="block text-xs font-bold text-stone-500 uppercase mb-4">Produktions-Liste</label>
+                  <div className="border border-stone-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left bg-white">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                        <tr>
+                          <th className="p-3">Produkt / Freitext</th>
+                          <th className="p-3 w-28 text-center">Verkauft</th>
+                          <th className="p-3 w-28 text-center">Retoure</th>
+                          <th className="p-3 w-12 text-center"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logItems.map((item, index) => (
+                          <tr key={item.id} className="border-b border-stone-100 last:border-0 group hover:bg-stone-50 transition-colors">
+                            <td className="p-2">
+                              <input autoFocus={index === logItems.length -1} type="text" value={item.productName} onChange={e => updateLogItem(item.id, 'productName', e.target.value)} placeholder="z.B. Bauernbrot" className="w-full bg-white border border-stone-200 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-stone-700 placeholder:font-normal" />
+                            </td>
+                            <td className="p-2">
+                              <input type="number" value={item.sold} onChange={e => updateLogItem(item.id, 'sold', e.target.value)} placeholder="0" className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-black text-center" />
+                            </td>
+                            <td className="p-2">
+                              <input type="number" value={item.leftover} onChange={e => updateLogItem(item.id, 'leftover', e.target.value)} placeholder="0" className="w-full bg-red-50 border border-red-200 text-red-900 px-3 py-2.5 rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-black text-center" />
+                            </td>
+                            <td className="p-2 text-center">
+                              {logItems.length > 1 && (
+                                <button onClick={() => removeLogItemRow(item.id)} className="p-2 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button onClick={addLogItemRow} className="w-full bg-stone-50 text-stone-500 hover:text-stone-800 hover:bg-stone-100 py-3 text-sm font-bold flex items-center justify-center transition-colors border-t border-stone-200">
+                      <Plus className="w-4 h-4 mr-2" /> Weitere Zeile hinzufügen
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-stone-100">
-                  <div>
-                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Verkaufte Menge</label>
-                    <input type="number" value={logSold} onChange={e => setLogSold(e.target.value)} placeholder="0" className="w-full bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-4 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none font-black text-2xl text-center" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-stone-500 uppercase mb-2">Davon Retoure</label>
-                    <input type="number" value={logReturn} onChange={e => setLogReturn(e.target.value)} placeholder="0" className="w-full bg-red-50 border border-red-200 text-red-900 px-4 py-4 rounded-2xl focus:ring-2 focus:ring-red-500 outline-none font-black text-2xl text-center" />
-                  </div>
-                </div>
-                <button onClick={handleSaveLog} disabled={!logProductText || !logSold} className="w-full bg-stone-800 disabled:bg-stone-300 text-white px-6 py-4 rounded-2xl font-bold hover:bg-stone-900 text-lg shadow-md transition-all">Eintrag speichern</button>
+                <button onClick={handleSaveDayLog} disabled={!hasValidItems} className="w-full bg-stone-800 disabled:bg-stone-300 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-md transition-all mt-4 hover:bg-stone-900 active:scale-95">
+                  Kompletten Tag speichern
+                </button>
               </div>
             </div>
           )}
 
-          <div className="space-y-4">
-            {productionLogs.map(log => {
-              // Abwärtskompatibilität für alte Einträge, die noch eine recipeId haben
-              let productName = log.productText;
-              if (!productName && log.recipeId) {
-                const rec = recipes.find(r => r.id === log.recipeId);
-                productName = rec ? rec.title : 'Unbekanntes Produkt';
-              }
-              
-              const totalProduced = log.produced || (parseFloat(log.sold) + parseFloat(log.leftover));
-              const soldAmount = log.sold !== undefined ? log.sold : (log.produced - log.leftover);
-              const quote = totalProduced > 0 ? Math.round((soldAmount / totalProduced) * 100) : 0;
+          {/* Anzeige der gespeicherten Tages-Karten */}
+          <div className="space-y-6">
+            {groupedLogs.map(group => {
+              // Datum schön formatieren (z.B. "Dienstag, 17. Juni 2026")
+              const dateObj = new Date(group.date);
+              const dateDisplay = dateObj.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
               return (
-                <div key={log.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <span className="font-black text-xl text-stone-800">{new Date(log.date).toLocaleDateString('de-DE')}</span>
-                      {log.tags && log.tags.map(t => (
-                        <span key={t} className="bg-stone-100 text-stone-700 border border-stone-200 px-2 py-1 rounded-md text-xs font-bold">{t}</span>
-                      ))}
-                    </div>
-                    {/* whitespace-pre-wrap sorgt dafür, dass Zeilenumbrüche vom Textfeld hier korrekt angezeigt werden! */}
-                    <h4 className="text-lg font-bold text-stone-700 mb-2 whitespace-pre-wrap">{productName}</h4>
-                    <div className="flex gap-4 text-sm font-medium">
-                      <span className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100">Verkauft: <strong className="font-black text-emerald-900 text-base ml-1">{soldAmount}</strong></span>
-                      <span className="bg-red-50 text-red-700 px-3 py-1.5 rounded-lg border border-red-100">Retoure: <strong className="font-black text-red-900 text-base ml-1">{log.leftover}</strong></span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-stone-100 pt-4 md:pt-0 md:pl-6">
-                    <div className="text-right">
-                      <span className="block text-[10px] font-black text-stone-400 uppercase tracking-wider mb-1">Verkaufsquote</span>
-                      <span className={`font-black text-3xl ${quote > 85 ? 'text-emerald-500' : quote > 60 ? 'text-orange-500' : 'text-red-500'}`}>{quote}%</span>
+                <div key={group.id} className="bg-white rounded-[2rem] shadow-sm border border-stone-200 overflow-hidden">
+                  <div className="bg-stone-800 text-white p-6 border-b border-stone-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h4 className="font-black text-2xl mb-2">{dateDisplay}</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {group.tags.map(t => (
+                          <span key={t} className="bg-white/10 border border-white/20 text-white px-3 py-1 rounded-lg text-xs font-bold tracking-wide">{t}</span>
+                        ))}
+                      </div>
                     </div>
                     <button 
-                      onClick={() => setProductionLogs(productionLogs.filter(l => l.id !== log.id))} 
-                      className="p-3 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                      title="Eintrag löschen"
+                      onClick={() => deleteDayGroup(group.originalIds)} 
+                      className="w-12 h-12 shrink-0 bg-stone-700/50 hover:bg-red-500 text-stone-300 hover:text-white rounded-2xl flex items-center justify-center transition-colors"
+                      title="Gesamten Tag löschen"
                     >
-                      <X className="w-6 h-6" />
+                      <Trash2 className="w-6 h-6" />
                     </button>
+                  </div>
+
+                  <div className="p-0 overflow-x-auto">
+                    <table className="w-full text-left min-w-[500px]">
+                      <thead>
+                        <tr className="bg-stone-50 border-b border-stone-100 text-[10px] font-black text-stone-400 uppercase tracking-wider">
+                          <th className="py-4 px-6">Produkt</th>
+                          <th className="py-4 px-6 text-center w-32">Verkauft</th>
+                          <th className="py-4 px-6 text-center w-32">Retoure</th>
+                          <th className="py-4 px-6 text-right w-32">Verkaufsquote</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {group.items.map((item, idx) => {
+                          const totalProduced = item.sold + item.leftover;
+                          const quote = totalProduced > 0 ? Math.round((item.sold / totalProduced) * 100) : 0;
+                          return (
+                            <tr key={idx} className="hover:bg-stone-50/50 transition-colors">
+                              <td className="py-4 px-6 font-bold text-stone-700 text-lg">{item.productName}</td>
+                              <td className="py-4 px-6 text-center">
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-black px-4 py-1.5 rounded-xl">{item.sold}</span>
+                              </td>
+                              <td className="py-4 px-6 text-center">
+                                <span className="bg-red-50 text-red-700 border border-red-100 font-black px-4 py-1.5 rounded-xl">{item.leftover}</span>
+                              </td>
+                              <td className="py-4 px-6 text-right">
+                                <span className={`font-black text-xl ${quote >= 85 ? 'text-emerald-500' : quote >= 60 ? 'text-orange-500' : 'text-red-500'}`}>{quote}%</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
