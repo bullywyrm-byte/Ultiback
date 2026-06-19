@@ -482,7 +482,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     if (!file) return;
 
 
-    const apiKey = "AQ.Ab8RN6LVEiCujOsJpRsDjYIepOet1VQjcn0Xwejui0mG_8drWQ";
+    const apiKey = "AQ.Ab8RN6Kc6hzVeQqJyH7DJsHwzki5C11Zg4kQJCPKecj83swY7w";
 
     if (!apiKey || !apiKey.startsWith("AQ.")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
