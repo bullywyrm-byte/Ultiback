@@ -58,6 +58,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
+  const [account, setAccount] = useLocalDB('ulti_back_account', null);
   const [user, setUser] = useLocalDB('ulti_back_user', null);
   const [activeTab, setActiveTab] = useState('inventory');
 
@@ -67,26 +68,42 @@ function App() {
   const [productionLogs, setProductionLogs] = useLocalDB('ulti_back_production', []);
   const [weeklyPlan, setWeeklyPlan] = useLocalDB('ulti_back_weekly_plan', []);
 
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginCode, setLoginCode] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  const handleRegister = () => {
-    if (loginCode !== 'DANIELS-BACKSTUBE-2026') {
-      setLoginError('Ungültiger Registrierungs-Code!');
-      return;
+  const handleAuth = () => {
+    if (!account) {
+      // Registrierung (Account erstellen)
+      if (loginCode !== '31123112') {
+        setLoginError('Ungültiger Inhaber-Code!');
+        return;
+      }
+      if (loginUser.trim().length < 3 || loginPass.length < 4) {
+        setLoginError('Bitte einen gültigen Benutzernamen und ein Passwort eingeben.');
+        return;
+      }
+      const newAccount = { username: loginUser.trim(), password: loginPass };
+      setAccount(newAccount);
+      setUser({ username: newAccount.username, uid: 'local_user_' + Date.now() });
+      setLoginError('');
+    } else {
+      // Normaler Login
+      if (loginUser.trim() === account.username && loginPass === account.password) {
+        setUser({ username: account.username, uid: 'local_user_' + Date.now() });
+        setLoginError('');
+      } else {
+        setLoginError('Benutzername oder Passwort ist falsch.');
+      }
     }
-    if (!loginEmail.includes('@') || loginPass.length < 6) {
-      setLoginError('Bitte gültige E-Mail und sicheres Passwort eingeben.');
-      return;
-    }
-    setUser({ email: loginEmail, uid: 'local_user_' + Date.now() });
-    setLoginError('');
   };
 
   const handleLogout = () => {
     setUser(null);
+    setLoginUser('');
+    setLoginPass('');
+    setLoginCode('');
   };
 
   if (!user) {
@@ -95,7 +112,9 @@ function App() {
         <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl w-full max-w-md border border-stone-200">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
-            <p className="text-orange-600 font-bold mt-1">Registrierung & Login</p>
+            <p className="text-orange-600 font-bold mt-1">
+              {!account ? 'Konto initial erstellen' : 'Login'}
+            </p>
           </div>
 
           {loginError && (
@@ -106,20 +125,23 @@ function App() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">E-Mail Adresse</label>
-              <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="bäcker@beispiel.de" />
+              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Benutzername</label>
+              <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="Dein Benutzername" />
             </div>
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Passwort</label>
               <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="••••••••" />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Geheimer Inhaber-Code</label>
-              <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)} className="w-full bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black tracking-widest text-center" placeholder="CODE EINGEBEN" />
-            </div>
+            
+            {!account && (
+              <div>
+                <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Geheimer Inhaber-Code</label>
+                <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)} className="w-full bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black tracking-widest text-center" placeholder="CODE EINGEBEN" />
+              </div>
+            )}
 
-            <button onClick={handleRegister} className="w-full bg-stone-800 text-white mt-4 py-4 rounded-2xl font-bold shadow-md hover:bg-stone-900 transition-colors text-lg active:scale-95">
-              Account erstellen / Einloggen
+            <button onClick={handleAuth} className="w-full bg-stone-800 text-white mt-4 py-4 rounded-2xl font-bold shadow-md hover:bg-stone-900 transition-colors text-lg active:scale-95">
+              {!account ? 'Account lokal erstellen' : 'Einloggen'}
             </button>
           </div>
         </div>
@@ -481,8 +503,7 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     const file = e.target.files[0];
     if (!file) return;
 
-
-    const apiKey = "AQ.Ab8RN6Kc6hzVeQqJyH7DJsHwzki5C11Zg4kQJCPKecj83swY7w";
+    const apiKey = "AQ.Ab8RN6IZL-f1JJHzavpkmsq-DlXNmZiACIWagXb1QRtmbrDGYQ";
 
     if (!apiKey || !apiKey.startsWith("AQ.")) {
       setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
@@ -1404,7 +1425,7 @@ function SettingsView({ user, onLogout, data, setData }) {
           <div className="bg-stone-50 p-6 rounded-2xl border border-stone-100 flex items-center justify-between">
             <div>
               <p className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-1">Angemeldet als</p>
-              <p className="font-black text-xl text-stone-800">{user.email}</p>
+              <p className="font-black text-xl text-stone-800">{user.username}</p>
             </div>
             <button onClick={onLogout} className="px-4 py-2 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl hover:bg-stone-100 transition-colors">
               Abmelden
