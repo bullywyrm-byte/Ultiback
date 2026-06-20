@@ -67,14 +67,17 @@ function App() {
   const [customPrices, setCustomPrices] = useLocalDB('ulti_back_customPrices', {});
   const [productionLogs, setProductionLogs] = useLocalDB('ulti_back_production', []);
   const [weeklyPlan, setWeeklyPlan] = useLocalDB('ulti_back_weekly_plan', []);
+  const [apiKey, setApiKey] = useLocalDB('ulti_back_api_key', 'AQ.Ab8RN6IZL-f1JJHzavpkmsq-DlXNmZiACIWagXb1QRtmbrDGYQ');
 
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginCode, setLoginCode] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [showRegisterPrompt, setShowRegisterPrompt] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   const handleAuth = () => {
-    if (!account) {
+    if (!account || showRegister) {
       // Registrierung (Account erstellen)
       if (loginCode !== '31123112') {
         setLoginError('Ungültiger Inhaber-Code!');
@@ -88,13 +91,17 @@ function App() {
       setAccount(newAccount);
       setUser({ username: newAccount.username, uid: 'local_user_' + Date.now() });
       setLoginError('');
+      setShowRegisterPrompt(false);
+      setShowRegister(false);
     } else {
       // Normaler Login
       if (loginUser.trim() === account.username && loginPass === account.password) {
         setUser({ username: account.username, uid: 'local_user_' + Date.now() });
         setLoginError('');
+        setShowRegisterPrompt(false);
       } else {
         setLoginError('Benutzername oder Passwort ist falsch.');
+        setShowRegisterPrompt(true);
       }
     }
   };
@@ -104,6 +111,9 @@ function App() {
     setLoginUser('');
     setLoginPass('');
     setLoginCode('');
+    setLoginError('');
+    setShowRegisterPrompt(false);
+    setShowRegister(false);
   };
 
   if (!user) {
@@ -113,27 +123,37 @@ function App() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-stone-800 tracking-tight">Ulti-Back</h1>
             <p className="text-orange-600 font-bold mt-1">
-              {!account ? 'Konto initial erstellen' : 'Login'}
+              {(!account || showRegister) ? 'Konto initial erstellen' : 'Login'}
             </p>
           </div>
 
           {loginError && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm font-bold border border-red-100 flex items-center">
-              <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {loginError}
+            <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm font-bold border border-red-100 flex flex-col items-start">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {loginError}
+              </div>
+              {showRegisterPrompt && !showRegister && (
+                <button 
+                  onClick={() => { setShowRegister(true); setLoginError(''); setShowRegisterPrompt(false); setLoginCode(''); }} 
+                  className="mt-3 text-red-700 underline font-black text-xs uppercase tracking-wider hover:text-red-800 transition-colors"
+                >
+                  Neuen Benutzer anlegen?
+                </button>
+              )}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Benutzername</label>
-              <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="Dein Benutzername" />
+              <input type="text" value={loginUser} onChange={e => { setLoginUser(e.target.value); setShowRegisterPrompt(false); }} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="Dein Benutzername" />
             </div>
             <div>
               <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Passwort</label>
-              <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="••••••••" />
+              <input type="password" value={loginPass} onChange={e => { setLoginPass(e.target.value); setShowRegisterPrompt(false); }} className="w-full bg-stone-50 border border-stone-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium" placeholder="••••••••" />
             </div>
             
-            {!account && (
+            {(!account || showRegister) && (
               <div>
                 <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Geheimer Inhaber-Code</label>
                 <input type="text" value={loginCode} onChange={e => setLoginCode(e.target.value)} className="w-full bg-orange-50 border border-orange-200 text-orange-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-black tracking-widest text-center" placeholder="CODE EINGEBEN" />
@@ -141,8 +161,14 @@ function App() {
             )}
 
             <button onClick={handleAuth} className="w-full bg-stone-800 text-white mt-4 py-4 rounded-2xl font-bold shadow-md hover:bg-stone-900 transition-colors text-lg active:scale-95">
-              {!account ? 'Account lokal erstellen' : 'Einloggen'}
+              {(!account || showRegister) ? 'Account lokal erstellen' : 'Einloggen'}
             </button>
+
+            {account && showRegister && (
+              <button onClick={() => { setShowRegister(false); setLoginError(''); setLoginCode(''); }} className="w-full bg-transparent text-stone-500 py-3 rounded-2xl font-bold hover:bg-stone-50 transition-colors text-sm">
+                Abbrechen & Zurück zum Login
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -173,10 +199,10 @@ function App() {
         </div>
 
         {activeTab === 'inventory' && <InventoryView inventory={inventory} setInventory={setInventory} />}
-        {activeTab === 'recipes' && <RecipeView recipes={recipes} setRecipes={setRecipes} />}
+        {activeTab === 'recipes' && <RecipeView recipes={recipes} setRecipes={setRecipes} apiKey={apiKey} />}
         {activeTab === 'kalkulation' && <CalculationView customPrices={customPrices} setCustomPrices={setCustomPrices} recipes={recipes} />}
         {activeTab === 'production' && <ProductionView productionLogs={productionLogs} setProductionLogs={setProductionLogs} recipes={recipes} weeklyPlan={weeklyPlan} setWeeklyPlan={setWeeklyPlan} />}
-        {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{ inventory, recipes, customPrices, productionLogs, weeklyPlan }} setData={{ setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan }} />}
+        {activeTab === 'settings' && <SettingsView user={user} onLogout={handleLogout} data={{ inventory, recipes, customPrices, productionLogs, weeklyPlan }} setData={{ setInventory, setRecipes, setCustomPrices, setProductionLogs, setWeeklyPlan }} apiKey={apiKey} setApiKey={setApiKey} />}
       </main>
 
       <nav className="md:hidden fixed bottom-0 w-full bg-stone-100/90 backdrop-blur-md border-t border-stone-200/50 pb-safe z-50">
@@ -324,7 +350,7 @@ function InventoryView({ inventory, setInventory }) {
   );
 }
 
-function RecipeView({ recipes, setRecipes }) {
+function RecipeView({ recipes, setRecipes, apiKey }) {
   const [editingRecipe, setEditingRecipe] = useState(null);
   const [scalingMultiplier, setScalingMultiplier] = useState({});
 
@@ -362,6 +388,7 @@ function RecipeView({ recipes, setRecipes }) {
       allRecipes={recipes}
       onSave={saveRecipe}
       onCancel={() => setEditingRecipe(null)}
+      apiKey={apiKey}
     />;
   }
 
@@ -474,7 +501,7 @@ function RecipeView({ recipes, setRecipes }) {
   );
 }
 
-function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
+function RecipeEditor({ recipe, allRecipes, onSave, onCancel, apiKey }) {
   const [edited, setEdited] = useState({ ...recipe });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState('');
@@ -503,10 +530,8 @@ function RecipeEditor({ recipe, allRecipes, onSave, onCancel }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const apiKey = "AQ.Ab8RN6IZL-f1JJHzavpkmsq-DlXNmZiACIWagXb1QRtmbrDGYQ";
-
-    if (!apiKey || !apiKey.startsWith("AQ.")) {
-      setAnalyzeError("Fehler: Bitte einen gültigen API-Key im Code eintragen.");
+    if (!apiKey) {
+      setAnalyzeError("Fehler: Bitte trage zuerst in den Einstellungen deinen kostenlosen API-Key ein.");
       e.target.value = '';
       return;
     }
@@ -1365,7 +1390,7 @@ function ProductionView({ productionLogs, setProductionLogs, recipes, weeklyPlan
   );
 }
 
-function SettingsView({ user, onLogout, data, setData }) {
+function SettingsView({ user, onLogout, data, setData, apiKey, setApiKey }) {
   const [importStatus, setImportStatus] = useState(null);
 
   const handleExport = () => {
@@ -1454,6 +1479,24 @@ function SettingsView({ user, onLogout, data, setData }) {
                 <span className="text-xs text-stone-400 mt-1">Daten überschreiben</span>
                 <input type="file" accept=".json" onChange={handleImport} className="hidden" />
               </label>
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-stone-100">
+            <h3 className="text-lg font-black text-stone-800 mb-4">KI Rezept-Scanner Setup</h3>
+            <div className="bg-orange-50 border border-orange-200 p-6 rounded-2xl">
+              <label className="block text-sm font-bold text-orange-900 mb-2">Google Gemini API-Key (Kostenlos)</label>
+              <p className="text-xs text-orange-800/80 mb-4">
+                Hier wird der API-Key eingetragen <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="underline font-bold hover:text-orange-600">Google AI Studio</a> und füge ihn hier ein. Er wird nur lokal in deinem Browser gespeichert.
+              </p>
+              <input 
+                type="password" 
+                value={apiKey} 
+                onChange={e => setApiKey(e.target.value)} 
+                placeholder="AIzaSy..." 
+                className="w-full bg-white border border-orange-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-medium mb-2"
+              />
+              {apiKey && <div className="text-emerald-600 text-xs font-bold flex items-center"><Check className="w-4 h-4 mr-1" /> API Key ist lokal gespeichert.</div>}
             </div>
           </div>
 
